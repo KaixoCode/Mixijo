@@ -18,8 +18,10 @@ add_executable(Mixijo
 
 target_include_directories(Mixijo PUBLIC
   libs/Guijo/include
+  libs/Guijo/libs
   libs/Midijo/include
   libs/Audijo/include
+  ${SRC}include
 )
 
 source_group(TREE ${SRC} FILES ${SOURCE})

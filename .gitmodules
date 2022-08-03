@@ -1,0 +1,9 @@
+[submodule "libs/Guijo"]
+	path = libs/Guijo
+	url = https://github.com/KaixoCode/Guijo.git
+[submodule "libs/Audijo"]
+	path = libs/Audijo
+	url = https://github.com/KaixoCode/Audijo.git
+[submodule "libs/Midijo"]
+	path = libs/Midijo
+	url = https://github.com/KaixoCode/Midijo.git
