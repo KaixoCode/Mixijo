@@ -88,7 +88,7 @@ struct Audio : Stream<Audijo::Api::Asio> {
     }
 
     static void callback(Buffer<double>& in, Buffer<double>& out, CallbackInfo info, Audio& self) {
-        std::lock_guard _{ self.lock };
+        std::scoped_lock _{ self.lock };
         for (std::size_t i = 0; i < in.Frames(); ++i) {
             auto _in_frame = in[i], _out_frame = out[i];
             // Mute the output
