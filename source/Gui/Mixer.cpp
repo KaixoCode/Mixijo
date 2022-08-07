@@ -4,8 +4,6 @@
 namespace Mixijo::Gui {
 
     Mixer::Mixer() {
-        box.size.width = Flex::pc{ 100 };
-        box.size.height = Flex::pc{ 100 };
         box.use = false;
 
         link(background);
@@ -37,10 +35,11 @@ namespace Mixijo::Gui {
     }
 
     void Mixer::draw(DrawContext& p) const  {
+        p.strokeWeight(0);
         p.fill(background);
         p.rect(dimensions());
         p.fill(divider);
-        p.rect(Dimensions{ dividerX, y(), 1, height() });
+        p.rect(Dimensions{ dividerX, y(), 2, height() });
         Object::draw(p);
     }
 
@@ -51,7 +50,7 @@ namespace Mixijo::Gui {
         float _x = x() + _outerPadding;
         float _y = y() + _outerPadding;
         float _h = height() - _outerPadding * 2;
-        float _w = (width() - _outerPadding - 4 * _padding - 1) / _objects.size();
+        float _w = (width() - _outerPadding - 4 * _padding - 2) / _objects.size();
         bool _outputs = true;
         for (auto& _obj : _objects) {
             auto _channel = _obj.as<Channel>();
@@ -59,7 +58,7 @@ namespace Mixijo::Gui {
                 _outputs = false;
                 _x += _padding;
                 dividerX = _x;
-                _x += 1;
+                _x += 2;
                 _x += _padding;
                 _x += _padding;
             }

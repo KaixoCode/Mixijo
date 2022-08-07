@@ -2,6 +2,16 @@
 
 namespace Mixijo {
     
+
+    void Channel::getSettings(std::ofstream& file) {
+        file << "gain=" << gain << ",limiter=" << (enableLimiter ? 1 : 0);
+    }
+
+    void Channel::setSetting(std::string_view name, double val) {
+        if (name == "gain") gain = val;
+        if (name == "limiter") enableLimiter = val;
+    }
+
     void Channel::addMidiLink(std::string_view name, int id) {
         if (name == "gain") midiLinks[id] = Gain;
     }
@@ -17,6 +27,9 @@ namespace Mixijo {
         endpoints.push_back(endpoint);
         values.resize(endpoints.size());
         peaks.resize(endpoints.size());
+        limiter.delayedBuffer.emplace_back();
+        for (auto& _buffer : limiter.delayedBuffer)
+            _buffer.resize(144);
     }
 
     void Channel::remove(int endpoint) {
@@ -27,7 +40,8 @@ namespace Mixijo {
 
     void Channel::process() {
         for (std::size_t i = 0; i < values.size(); ++i) {
-            values[i] *= gain;
+            if (enableLimiter) values[i] = limiter.process(values[i], i) * gain;
+            else values[i] *= gain;
             const double _abs = std::abs(values[i]);
             peaks[i] = std::max(_abs, peaks[i]);
         }
@@ -40,9 +54,12 @@ namespace Mixijo {
     }
 
     void OutputChannel::receive(const std::vector<double>& in, double level) {
-        if (values.size() == 0) return;
-        for (std::size_t i = 0; i < std::max(in.size(), values.size()); ++i)
-            values[i % values.size()] += in[i % in.size()] * level;
+        const auto _valSize = values.size();
+        const auto _inSize = in.size();
+        if (_valSize == 0 || _inSize == 0) return;
+        const auto _max = std::max(_valSize, _inSize);
+        for (std::size_t i = 0; i < _max; ++i)
+            values[i % _valSize] += in[i % _inSize] * level;
     }
 
     void OutputChannel::clear() {

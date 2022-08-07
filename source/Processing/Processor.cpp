@@ -38,7 +38,11 @@ namespace Mixijo {
         auto& devices = Devices(true);
         for (auto& _device : devices) {
             if (_device.name == Controller::audioDevice) {
-                Audijo::Error _res = Open({ .input = _device.id, .output = _device.id });
+                Audijo::Error _res = Open({ 
+                    .input = _device.id, 
+                    .output = _device.id,
+                    .sampleRate = Controller::sampleRate  
+                });
                 if (_res == Audijo::NoError) _res = Start();
                 return _res;
             }
@@ -88,6 +92,7 @@ namespace Mixijo {
     }
 
     int Processor::find_endpoint(std::string_view name, bool in) {
+        if (Information().state == Audijo::StreamState::Closed) return -1;
         for (auto& _channel : endpoints())
             if (_channel.input == in && _channel.name == name) return _channel.id;
         return -1;

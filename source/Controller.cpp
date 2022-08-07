@@ -5,13 +5,105 @@
 
 namespace Mixijo {
 
+    Frame::Button::Button(int type) : type(type) {
+        background = { 120, 120, 120, 0 };
+        background[Pressed] = { 120, 120, 120, 150 };
+        background[Hovering] = { 120, 120, 120, 90 };
+        icon = { 250, 250, 250 };
+        link(background);
+        link(icon);
+        event<Button>();
+    }
+
+    void Frame::Button::mouseRelease(const MouseRelease& e) {
+        if (hitbox(e.pos) && callback)
+            callback();
+    }
+
+    void Frame::Button::draw(DrawContext& p) const {
+        p.strokeWeight(0);
+        p.fill(background);
+        p.rect(dimensions());
+        p.fill({ 0, 0, 0, 0 });
+        p.strokeWeight(1);
+        p.stroke(icon);
+        auto _center = dimensions().center();
+        auto _size = 5;
+        switch (type) {
+        case 0:
+            p.line({ _center.x() - _size, _center.y() - _size }, { _center.x() + _size, _center.y() + _size });
+            p.line({ _center.x() - _size, _center.y() + _size }, { _center.x() + _size, _center.y() - _size });
+            break;
+        case 1:
+            p.rect(Dimensions{ _center.x() - _size - 0.5, _center.y() - _size - 0.5, _size * 2, _size * 2 });
+            break;
+        case 2:
+            p.line({ _center.x() - _size, _center.y() }, { _center.x() + _size, _center.y() });
+            break;
+        }
+    }
+
+    Frame::Frame(Window::Construct c) 
+        : Window(c) 
+    {
+        title = { 200, 200, 200 };
+        mixer = emplace<Gui::Mixer>().as<Object>();
+        box.use = false;
+
+        close->callback = [&] {
+            m_ShouldExit = true;
+        };
+
+        maximize->callback = [&] {
+            if (IsMaximized(m_Handle)) ShowWindow(m_Handle, SW_RESTORE);
+            else ShowWindow(m_Handle, SW_MAXIMIZE);
+        };
+
+        minimize->callback = [&] {
+            ShowWindow(m_Handle, SW_MINIMIZE);
+        };
+    }
+
+    void Frame::draw(DrawContext& p) const {
+        p.fill(border);
+        p.rect(Dimensions{ 0, 0, width(), height() });
+        Object::draw(p);
+    }
+
+    void Frame::update() {
+        if (IsMaximized(m_Handle)) {
+            mixer->dimensions({ 16, 40, width() - 32, height() - 56 });
+            close->dimensions({ width() - 45 * 1 - 8, 8, 45, 29 });
+            maximize->dimensions({ width() - 45 * 2 - 8, 8, 45, 29 });
+            minimize->dimensions({ width() - 45 * 3 - 8, 8, 45, 29 });
+        } else {
+            mixer->dimensions({ 8, 32, width() - 16, height() - 40 });
+            close->dimensions({ width() - 45 * 1, 0, 45, 29 });
+            maximize->dimensions({ width() - 45 * 2, 0, 45, 29 });
+            minimize->dimensions({ width() - 45 * 3, 0, 45, 29 });
+        }
+        Window::update();
+    }
+
+    void Frame::updateTheme() {
+        Controller::theme.border.assign(border);
+        Controller::theme.close.background.assign(close->background);
+        Controller::theme.close.icon.assign(close->icon);
+        Controller::theme.minimize.background.assign(minimize->background);
+        Controller::theme.minimize.icon.assign(minimize->icon);
+        Controller::theme.maximize.background.assign(maximize->background);
+        Controller::theme.maximize.icon.assign(maximize->icon);
+        mixer.as<Gui::Mixer>()->updateTheme();
+    }
+
+    double Controller::sampleRate = 48000;
     std::string Controller::audioDevice;
     std::string Controller::midiinDevice;
     std::string Controller::midioutDevice;
     int Controller::selectedChannel = -1;
     bool Controller::selectedInput = false;
     Processor Controller::processor{};
-    Pointer<Window> Controller::window{};
+    Pointer<Frame> Controller::window{};
     Controller::Theme Controller::theme;
 
     void Controller::loadSettings() {
@@ -33,6 +125,7 @@ namespace Mixijo {
             if (_device == "audio") audioDevice = _name;
             if (_device == "midiin") midiinDevice = _name;
             if (_device == "midiout") midioutDevice = _name;
+            if (_device == "samplerate") sampleRate = parse<double>(_name);
         }
     }
 
@@ -112,12 +205,20 @@ namespace Mixijo {
                 return false;
             };
 
+            if (_tryValue("close.background", theme.close.background)) continue;
+            if (_tryValue("close.icon", theme.close.icon)) continue;
+            if (_tryValue("minimize.background", theme.minimize.background)) continue;
+            if (_tryValue("minimize.icon", theme.minimize.icon)) continue;
+            if (_tryValue("maximize.background", theme.maximize.background)) continue;
+            if (_tryValue("maximize.icon", theme.maximize.icon)) continue;
+            if (_tryValue("border", theme.border)) continue;
             if (_tryValue("divider", theme.divider)) continue;
             if (_tryValue("background", theme.background)) continue;
             if (_tryValue("routebutton.background", theme.routebutton.background)) continue;
             if (_tryValue("routebutton.borderWidth", theme.routebutton.borderWidth)) continue;
             if (_tryValue("routebutton.border", theme.routebutton.border)) continue;
             if (_tryValue("channel.background", theme.channel.background)) continue;
+            if (_tryValue("channel.slider", theme.channel.slider)) continue;
             if (_tryValue("channel.borderWidth", theme.channel.borderWidth)) continue;
             if (_tryValue("channel.meterBackground", theme.channel.meterBackground)) continue;
             if (_tryValue("channel.meterLine1", theme.channel.meterLine1)) continue;
@@ -129,13 +230,12 @@ namespace Mixijo {
             if (_tryValue("channel.value", theme.channel.value)) continue;
         }
 
-        auto _mixer = window->objects()[0].as<Gui::Mixer>();
-        _mixer->updateTheme(); // Update theme in gui
+        window->updateTheme(); // Update theme in gui
     }
 
     void Controller::loadChannels() {
         // Get gui mixer object
-        auto _mixer = window->objects()[0].as<Gui::Mixer>();
+        auto _mixer = window->mixer.as<Gui::Mixer>();
         _mixer->objects().clear(); 
         processor.access([](Processor::Inputs& in, Processor::Outputs& out) {
             in.clear();
@@ -186,7 +286,7 @@ namespace Mixijo {
     }
 
     void Controller::loadRouting() {
-        auto _mixer = window->objects()[0].as<Gui::Mixer>();
+        auto _mixer = window->mixer.as<Gui::Mixer>();
         
         for (auto& _input : Controller::processor.inputs)
             for (auto& _output : _input.output_levels)
@@ -197,58 +297,85 @@ namespace Mixijo {
             std::string_view _view = _str;
             if (!_view.contains(":") || _view.starts_with("#")) continue;
             auto _parts = split(_view, ':');
-            if (_parts.size() != 2) continue;                 // Routing has 2 parts
-            auto _input = trim(_parts[0]);                    // part 1: input
-            auto _outputs = trim(_parts[1], " \t\n\r\f\v[]"); // part 2: connected outputs
+            if (_parts.size() < 2) continue;
+            auto _isInput = _parts.size() == 3;
+            auto _channelName = trim(_parts[0]);                     // part 1: input
+            auto _settings = trim(_parts[1], " \t\n\r\f\v[]"); // part 2: channel settings
 
-            int _inputId = -1;
+            int _channelId = -1;
             for (auto& _obj : _mixer->objects()) {
                 auto _channel = _obj.as<Gui::Channel>();
-                if (_channel->input && _input == _channel->name) {
-                    _inputId = _channel->id;
+                if (_channel->input == _isInput && _channelName == _channel->name) {
+                    _channelId = _channel->id;
                     break;
                 }
             }
-            if (_inputId == -1) continue;
+            if (_channelId == -1) continue;
 
-            std::vector<std::string_view> _outputsVec = split(_outputs, ',');
-            for (auto _name : _outputsVec) {
-                _name = trim(_name);
+            std::vector<std::string_view> _settingsVec = split(_settings, ',');
+            for (auto _setting : _settingsVec) {
+                _setting = trim(_setting);
+                auto _parts = split(_setting, '=');
+                if (_parts.size() < 2) continue; // Setting is 'name=val'
+                auto _name = trim(_parts[0]);
+                double _value = parse<double>(trim(_parts[1]));
+                auto& _c = _isInput
+                    ? static_cast<Channel&>(Controller::processor.inputs[_channelId])
+                    : static_cast<Channel&>(Controller::processor.outputs[_channelId]);
+                _c.setSetting(_name, _value);
+            }
 
-                int _outputId = -1;
-                for (auto& _obj : _mixer->objects()) {
-                    auto _channel = _obj.as<Gui::Channel>();
-                    if (!_channel->input && _name == _channel->name) {
-                        _outputId = _channel->id;
-                        break;
+            if (_parts.size() == 3) {
+                auto _outputs = trim(_parts[2], " \t\n\r\f\v[]");  // part 3: connected outputs
+                std::vector<std::string_view> _outputsVec = split(_outputs, ',');
+                for (auto _name : _outputsVec) {
+                    _name = trim(_name);
+
+                    int _outputId = -1;
+                    for (auto& _obj : _mixer->objects()) {
+                        auto _channel = _obj.as<Gui::Channel>();
+                        if (!_channel->input && _name == _channel->name) {
+                            _outputId = _channel->id;
+                            break;
+                        }
                     }
+
+                    if (_outputId == -1) continue;
+
+                    Controller::processor.inputs[_channelId].output_levels[_outputId] = 1;
                 }
-
-                if (_outputId == -1) continue;
-
-                Controller::processor.inputs[_inputId].output_levels[_outputId] = 1;
             }
         }
     }
 
     void Controller::saveRouting() {
-        auto _mixer = window->objects()[0].as<Gui::Mixer>();
+        auto _mixer = window->mixer.as<Gui::Mixer>();
 
         std::ofstream _file{ "./routing.txt" };
         for (auto& _obj : _mixer->objects()) {
-            auto _input = _obj.as<Gui::Channel>();
-            if (!_input->input) continue;
-            _file << _input->name << ":[";
-            bool _first = true;
-            for (auto& _obj : _mixer->objects()) {
-                auto _output = _obj.as<Gui::Channel>();
-                if (_output->input) continue;
+            auto _channel = _obj.as<Gui::Channel>();
 
-                auto _level = Controller::processor.inputs[_input->id].output_levels[_output->id];
-                if (_level) {
-                    if (!_first) _file << ",";
-                    _file << _output->name;
-                    _first = false;
+            auto& _c = _channel->input
+                ? static_cast<Channel&>(Controller::processor.inputs[_channel->id])
+                : static_cast<Channel&>(Controller::processor.outputs[_channel->id]);
+
+            _file << _channel->name;
+            _file << ":[";
+            _c.getSettings(_file);
+
+            if (_channel->input) {
+                _file << "]:[";
+                bool _first = true;
+                for (auto& _obj : _mixer->objects()) {
+                    auto _output = _obj.as<Gui::Channel>();
+                    if (_output->input) continue;
+
+                    auto _level = Controller::processor.inputs[_channel->id].output_levels[_output->id];
+                    if (_level) {
+                        if (!_first) _file << ",";
+                        _file << _output->name;
+                        _first = false;
+                    }
                 }
             }
             _file << "]\n";
@@ -257,9 +384,9 @@ namespace Mixijo {
 
     void Controller::start() {
         Guijo::Gui _gui;
-        window = _gui.emplace<Window>({
+        window = _gui.emplace<Frame>(Window::Construct{
             .name = "Mixijo",
-            .dimensions { -1, -1, 500, 500 },
+            .dimensions { -1, -1, 1000, 500 },
         });
 
         window->event<[](Window& self, const KeyPress& e) {
@@ -268,6 +395,12 @@ namespace Mixijo {
                 loadRouting();
             } else if (e.mod & Mods::Control && e.keycode == 'T') {
                 loadTheme();
+            } else if (e.mod & Mods::Control && e.keycode == 'S') {
+                saveRouting();
+            } else if (e.mod & Mods::Control && e.keycode == 'P') {
+                refreshDeviceNames();
+                if (Controller::processor.SetSampleRate(Controller::sampleRate) != Audijo::NoError)
+                    std::cout << "Failed to set samplerate to " << Controller::sampleRate << "\n";
             } else if (e.mod & Mods::Control && e.keycode == 'D') {
                 saveRouting();
                 loadDevices();
@@ -281,7 +414,6 @@ namespace Mixijo {
             }
         }>();
 
-        window->emplace<Gui::Mixer>();
         loadSettings();
 
         while (_gui.loop()) {

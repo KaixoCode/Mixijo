@@ -50,6 +50,36 @@ namespace Mixijo::Gui {
         updateTheme();
     }
 
+    void Channel::mousePress(const MousePress& e) {
+        pressGain = std::pow(input
+            ? Controller::processor.inputs[id].gain
+            : Controller::processor.outputs[id].gain, 0.25);
+    }
+    
+    void Channel::mouseClick(const MouseClick& e) {
+        auto& _val = input
+            ? Controller::processor.inputs[id].gain
+            : Controller::processor.outputs[id].gain;
+        if (counter > 0) _val = 1;
+        if (!route->get(Hovering)) counter = 20;
+    }
+
+    void Channel::mouseDrag(const MouseDrag& e) {
+        int _padding = 2;
+        int _outerPadding = 12;
+        Dimensions<int> _bars{
+            x() + _outerPadding,
+            y() + _outerPadding + 35,
+            width() - 2 * _outerPadding - 19,
+            height() - 2 * _outerPadding - 50 - 35
+        };
+
+        auto& _val = input
+            ? Controller::processor.inputs[id].gain
+            : Controller::processor.outputs[id].gain;
+        _val = std::pow(std::clamp(pressGain + 1.412536 * (e.source.y() - e.pos.y()) / _bars.height(), 0., 1.412536), 4);
+    }
+
     void Channel::draw(DrawContext& p) const {
         p.strokeWeight(borderWidth);
         p.stroke(border);
@@ -61,11 +91,11 @@ namespace Mixijo::Gui {
         p.textAlign(Align::Center);
         p.text(name, dimensions().inset(12).topCenter());
         int _padding = 2;
-        int _outerPadding = 8;
+        int _outerPadding = 12;
         Dimensions<int> _bars{
             x() + _outerPadding,
             y() + _outerPadding + 35,
-            width() - 2 * _outerPadding - 25,
+            width() - 2 * _outerPadding - 19,
             height() - 2 * _outerPadding - 50 - 35
         };
         auto lin2y = [&](float lin) {
@@ -123,16 +153,38 @@ namespace Mixijo::Gui {
         p.line({ _x, _bars.bottom() - 1.5 }, { _x + 5.f, _bars.bottom() - 1.5 });
         p.fill(meterText);
         p.text("inf", { _x + 25, _bars.bottom() - 1 });
+        p.strokeWeight(0);
+
+        auto _0y = _bars.height() + _bars.y() - lin2y(1);
+        p.fill(background);
+        p.rect(Dimensions{ _bars.x(), _0y, _bars.width(), 1 });
+
+        auto _gain = input
+            ? Controller::processor.inputs[id].gain
+            : Controller::processor.outputs[id].gain;
+        auto _sy = _bars.height() + _bars.y() - lin2y(_gain) - 2;
+        p.fill(slider);
+        p.rect(Dimensions{ _bars.x() - 3, _sy, _bars.width() + 6, 3 });
+        p.triangle(
+            { _bars.x(), _sy + 2 }, 
+            { _bars.x() - 8, _sy + 9 }, 
+            { _bars.x() - 8, _sy - 5 }
+        );
+        p.triangle(
+            { _bars.x() + _bars.width(), _sy + 2 }, 
+            { _bars.x() + _bars.width() + 8, _sy + 9 }, 
+            { _bars.x() + _bars.width() + 8, _sy - 5 }
+        );
 
         p.fill(value);
         p.textAlign(Align::Left | Align::Top);
         p.text(gain, _bars.inset(4, -8).bottomLeft());
-        p.strokeWeight(0);
 
         Object::draw(p);
     }
 
     void Channel::update() {
+        counter--;
         auto ane = get(Selected);
         auto& _channel = input
             ? static_cast<Mixijo::Channel&>(Controller::processor.inputs[id])
@@ -172,6 +224,7 @@ namespace Mixijo::Gui {
     
     void Channel::updateTheme() {
         Controller::theme.channel.background.assign(background);
+        Controller::theme.channel.slider.assign(slider);
         Controller::theme.channel.meter.assign(meter);
         Controller::theme.channel.meterBackground.assign(meterBackground);
         Controller::theme.channel.border.assign(border);
