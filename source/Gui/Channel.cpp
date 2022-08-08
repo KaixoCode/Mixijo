@@ -18,17 +18,17 @@ namespace Mixijo::Gui {
         link(borderWidth);
 
         borderWidth = 0;
-        border = { 0, 0, 0 };
+        border = Color{ 0, 0, 0 };
         meter = Color{ 0, 255, 0 };
-        meterBackground = { 5, 5, 5 };
-        meterLine1 = { 50, 50, 50 };
-        meterLine2 = { 90, 90, 90 };
-        meterText = { 200, 200, 200 };
-        title = { 200, 200, 200 };
-        value = { 200, 200, 200 };
+        meterBackground = Color{ 5, 5, 5 };
+        meterLine1 = Color{ 50, 50, 50 };
+        meterLine2 = Color{ 90, 90, 90 };
+        meterText = Color{ 200, 200, 200 };
+        title = Color{ 200, 200, 200 };
+        value = Color{ 200, 200, 200 };
         background.transition(100);
-        background = { 25, 25, 25 };
-        background[Selected] = { 30, 30, 30 };
+        background = Color{ 25, 25, 25 };
+        background[Selected] = Color{ 30, 30, 30 };
 
         route->callback = [&] {
             if (Controller::selectedChannel == -1) return;
@@ -198,10 +198,14 @@ namespace Mixijo::Gui {
 
         smoothed.resize(_channel.peaks.size());
 
+        double _biggest = 0;
         for (std::size_t i = 0; i < smoothed.size(); ++i) {
             smoothed[i] = smoothed[i] * 0.8 + 0.2 * _channel.peaks[i];
             _channel.peaks[i] = 0;
+            if (smoothed[i] > _biggest) _biggest = smoothed[i];
         }
+        waveform.push_back(_biggest);
+
         route->dimensions({ x() + 5, y() + height() - 30, width() - 10, 25 });
 
         if (Controller::selectedChannel != -1) {

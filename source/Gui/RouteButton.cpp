@@ -4,10 +4,10 @@
 namespace Mixijo::Gui {
     RouteButton::RouteButton() {
         box.use = false;
-        background = { 30, 30, 30 };
-        background[Hovering] = { 40, 40, 40 };
-        background[Pressed] = { 45, 45, 45 };
-        background[Selected] = { 45, 45, 45 };
+        background = Color{ 30, 30, 30 };
+        background[Hovering] = Color{ 40, 40, 40 };
+        background[Pressed] = Color{ 45, 45, 45 };
+        background[Selected] = Color{ 45, 45, 45 };
         background.transition(100);
         borderWidth = 0;
         border = { 0, 0, 0 };

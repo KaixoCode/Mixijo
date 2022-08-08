@@ -6,10 +6,10 @@
 namespace Mixijo {
 
     Frame::Button::Button(int type) : type(type) {
-        background = { 120, 120, 120, 0 };
-        background[Pressed] = { 120, 120, 120, 150 };
-        background[Hovering] = { 120, 120, 120, 90 };
-        icon = { 250, 250, 250 };
+        background = Color{ 120, 120, 120, 0 };
+        background[Pressed] = Color{ 120, 120, 120, 150 };
+        background[Hovering] = Color{ 120, 120, 120, 90 };
+        icon = Color{ 250, 250, 250 };
         link(background);
         link(icon);
         event<Button>();
@@ -46,7 +46,7 @@ namespace Mixijo {
     Frame::Frame(Window::Construct c) 
         : Window(c) 
     {
-        title = { 200, 200, 200 };
+        title = Color{ 200, 200, 200 };
         mixer = emplace<Gui::Mixer>().as<Object>();
         box.use = false;
 
@@ -65,6 +65,7 @@ namespace Mixijo {
     }
 
     void Frame::draw(DrawContext& p) const {
+        p.strokeWeight(0);
         p.fill(border);
         p.rect(Dimensions{ 0, 0, width(), height() });
         Object::draw(p);
@@ -406,11 +407,18 @@ namespace Mixijo {
                 loadDevices();
                 loadChannels();
                 loadRouting();
+            } else if (e.mod & Mods::Control && e.keycode == 'I') {
+                Controller::processor.OpenControlPanel();
             } else if (e.mod & Mods::Control && e.keycode == 'M') {
                 Controller::processor.midiin.Close();
                 Controller::processor.midiout.Close();
                 refreshDeviceNames();
                 Controller::processor.initMidi();
+            } else if (e.mod & Mods::Control && e.keycode == 'L') {
+                auto& _channels = Controller::processor.endpoints();
+                for (auto& _channel : _channels) {
+                    std::cout << _channel.name << ": " << (_channel.input ? "input" : "output") << "\n";
+                }
             }
         }>();
 
