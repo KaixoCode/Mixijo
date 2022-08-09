@@ -52,6 +52,7 @@ namespace Mixijo {
 
     struct Controller {
         static double sampleRate;
+        static int bufferSize;
         static std::string audioDevice;
         static std::string midiinDevice;
         static std::string midioutDevice;

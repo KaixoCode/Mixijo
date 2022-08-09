@@ -198,13 +198,10 @@ namespace Mixijo::Gui {
 
         smoothed.resize(_channel.peaks.size());
 
-        double _biggest = 0;
         for (std::size_t i = 0; i < smoothed.size(); ++i) {
             smoothed[i] = smoothed[i] * 0.8 + 0.2 * _channel.peaks[i];
             _channel.peaks[i] = 0;
-            if (smoothed[i] > _biggest) _biggest = smoothed[i];
         }
-        waveform.push_back(_biggest);
 
         route->dimensions({ x() + 5, y() + height() - 30, width() - 10, 25 });
 

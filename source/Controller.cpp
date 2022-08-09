@@ -98,6 +98,7 @@ namespace Mixijo {
     }
 
     double Controller::sampleRate = 48000;
+    int Controller::bufferSize = 512;
     std::string Controller::audioDevice;
     std::string Controller::midiinDevice;
     std::string Controller::midioutDevice;
@@ -127,6 +128,7 @@ namespace Mixijo {
             if (_device == "midiin") midiinDevice = _name;
             if (_device == "midiout") midioutDevice = _name;
             if (_device == "samplerate") sampleRate = parse<double>(_name);
+            if (_device == "buffersize") bufferSize = parse<int>(_name);
         }
     }
 

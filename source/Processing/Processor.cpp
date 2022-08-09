@@ -41,7 +41,8 @@ namespace Mixijo {
                 Audijo::Error _res = Open({ 
                     .input = _device.id, 
                     .output = _device.id,
-                    .sampleRate = Controller::sampleRate  
+                    .bufferSize = Controller::bufferSize,
+                    .sampleRate = Controller::sampleRate,
                 });
                 if (_res == Audijo::NoError) _res = Start();
                 return _res;
