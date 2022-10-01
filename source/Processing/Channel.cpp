@@ -1,4 +1,5 @@
 #include "Processing/Channel.hpp"
+#include "Controller.hpp"
 
 namespace Mixijo {
     
@@ -19,7 +20,7 @@ namespace Mixijo {
     void Channel::handleMidi(int id, int value) {
         if (!midiLinks.contains(id)) return;
         else switch (midiLinks.at(id)) {
-            case Gain: gain = std::pow(1.412536 * value / 127., 4); break;
+            case Gain: gain = std::pow(Controller::maxLin * value / 127., 4); break;
         }
     }
 

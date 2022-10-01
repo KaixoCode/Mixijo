@@ -3,8 +3,9 @@
 
 namespace Mixijo::Gui {
 
-    Channel::Channel(int gid, bool in, std::string_view name)
-        : id(gid), input(in), name(name), route(emplace<RouteButton>())
+
+    Channel::Channel(int _id, bool in, std::string_view name)
+        : id(_id), input(in), name(name), route(emplace<RouteButton>())
     {
         link(background);
         link(meter);
@@ -16,19 +17,6 @@ namespace Mixijo::Gui {
         link(title);
         link(value);
         link(borderWidth);
-
-        borderWidth = 0;
-        border = Color{ 0, 0, 0 };
-        meter = Color{ 0, 255, 0 };
-        meterBackground = Color{ 5, 5, 5 };
-        meterLine1 = Color{ 50, 50, 50 };
-        meterLine2 = Color{ 90, 90, 90 };
-        meterText = Color{ 200, 200, 200 };
-        title = Color{ 200, 200, 200 };
-        value = Color{ 200, 200, 200 };
-        background.transition(100);
-        background = Color{ 25, 25, 25 };
-        background[Selected] = Color{ 30, 30, 30 };
 
         route->callback = [&] {
             if (Controller::selectedChannel == -1) return;
@@ -64,47 +52,46 @@ namespace Mixijo::Gui {
         if (!route->get(Hovering)) counter = 20;
     }
 
-    void Channel::mouseDrag(const MouseDrag& e) {
-        int _padding = 2;
-        int _outerPadding = 12;
-        Dimensions<int> _bars{
-            x() + _outerPadding,
-            y() + _outerPadding + 35,
-            width() - 2 * _outerPadding - 19,
-            height() - 2 * _outerPadding - 50 - 35
+    Dimensions<int> Channel::bars() const {
+        constexpr int _padding = 12;
+        return Dimensions<int>{
+            x() + _padding,
+            y() + _padding + 35,
+            width() - 2 * _padding - 19,
+            height() - 2 * _padding - 50 - 35
         };
+    }
+
+    void Channel::mouseDrag(const MouseDrag& e) {
+        auto _bars = bars();
 
         auto& _val = input
             ? Controller::processor.inputs[id].gain
             : Controller::processor.outputs[id].gain;
-        _val = std::pow(std::clamp(pressGain + 1.412536 * (e.source.y() - e.pos.y()) / _bars.height(), 0., 1.412536), 4);
+        _val = std::pow(std::clamp(pressGain + Controller::maxLin * (e.source.y() - e.pos.y()) / _bars.height(), 0., Controller::maxLin), 4);
     }
 
     void Channel::draw(DrawContext& p) const {
+        // Background
         p.strokeWeight(borderWidth);
         p.stroke(border);
         p.fill(background);
         p.rect(dimensions());
+        // Title
         p.fill(title);
         p.font(Font::Default);
         p.fontSize(14);
         p.textAlign(Align::Center);
         p.text(name, dimensions().inset(12).topCenter());
-        int _padding = 2;
-        int _outerPadding = 12;
-        Dimensions<int> _bars{
-            x() + _outerPadding,
-            y() + _outerPadding + 35,
-            width() - 2 * _outerPadding - 19,
-            height() - 2 * _outerPadding - 50 - 35
-        };
-        auto lin2y = [&](float lin) {
-            return _bars.height() * std::clamp(std::pow(lin, 0.25) / 1.412536, 0., 1.);
+
+        const int _padding = 2;
+        const auto _bars = bars();
+
+        const auto lin2y = [&](float lin) {
+            return _bars.height() * std::clamp(std::pow(lin, 0.25) / Controller::maxLin, 0., 1.);
         };
 
-        auto db2y = [&](float db) {
-            return lin2y(db2lin(db));
-        };
+        const auto db2y = [&](float db) { return lin2y(db2lin(db)); };
 
         float _bottom = _bars.y() + _bars.height();
         int _x = _bars.x();
@@ -121,9 +108,9 @@ namespace Mixijo::Gui {
         }
         p.fill(background);
         p.rect(Dimensions{ _bars.x(), _bars.bottom() - 1, _bars.width(), 2});
-        const static std::array dB1{ 12.,                6.,               0.,                  -6.,                   -12.,                     -18.,                     -24.,                   -36.,                   -48.,                   -72. };
-        const static std::array dB2{ 12.,       9.,      6.,      3.,      0.,       -3.,       -6.,       -9.,        -12.,        -15.,        -18.,        -21.,        -24.,       -30.,       -36.,       -42.,       -48.,       -60.,       -72.,       -96. };
-        const static std::array dB3{ 12., 10.5, 9., 7.5, 6., 4.5, 3., 1.5, 0., -1.5, -3., -4.5, -6., -7.5, -9., -10.5, -12., -13.5, -15., -16.5, -18., -19.5, -21., -22.5, -24., -27., -30., -33., -36., -39., -42., -45., -48., -54., -60., -66., -72., -84., -96., -108. };
+        constexpr static std::array dB1{ 12.,                6.,               0.,                  -6.,                   -12.,                     -18.,                     -24.,                   -36.,                   -48.,                   -72. };
+        constexpr static std::array dB2{ 12.,       9.,      6.,      3.,      0.,       -3.,       -6.,       -9.,        -12.,        -15.,        -18.,        -21.,        -24.,       -30.,       -36.,       -42.,       -48.,       -60.,       -72.,       -96. };
+        constexpr static std::array dB3{ 12., 10.5, 9., 7.5, 6., 4.5, 3., 1.5, 0., -1.5, -3., -4.5, -6., -7.5, -9., -10.5, -12., -13.5, -15., -16.5, -18., -19.5, -21., -22.5, -24., -27., -30., -33., -36., -39., -42., -45., -48., -54., -60., -66., -72., -84., -96., -108. };
         const static std::array begins{ dB1.data(), dB2.data(), dB3.data() };
         const static std::array sizes{ dB1.size(), dB2.size(), dB3.size() };
 
@@ -237,5 +224,4 @@ namespace Mixijo::Gui {
         Controller::theme.channel.borderWidth.assign(borderWidth);
         route->updateTheme();
     }
-
 }

@@ -51,17 +51,20 @@ namespace Mixijo {
     };
 
     struct Controller {
+        static double maxDb;
+        static double maxLin;
         static double sampleRate;
         static int bufferSize;
         static std::string audioDevice;
         static std::string midiinDevice;
         static std::string midioutDevice;
+        static std::vector<std::pair<int, std::string>> buttons;
         static int selectedChannel;
         static bool selectedInput;
         static Processor processor;
         static Pointer<Frame> window;
 
-        static void refreshDeviceNames();
+        static void refreshSettings();
         static void loadSettings();
         static void loadChannels();
         static void loadTheme();

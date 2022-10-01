@@ -16,8 +16,7 @@ namespace Mixijo {
     }
 
     void Frame::Button::mouseRelease(const MouseRelease& e) {
-        if (hitbox(e.pos) && callback)
-            callback();
+        if (hitbox(e.pos) && callback) callback();
     }
 
     void Frame::Button::draw(DrawContext& p) const {
@@ -97,11 +96,14 @@ namespace Mixijo {
         mixer.as<Gui::Mixer>()->updateTheme();
     }
 
+    double Controller::maxDb = 12;
+    double Controller::maxLin = std::pow(10, 0.0125 * maxDb);
     double Controller::sampleRate = 48000;
     int Controller::bufferSize = 512;
     std::string Controller::audioDevice;
     std::string Controller::midiinDevice;
     std::string Controller::midioutDevice;
+    std::vector<std::pair<int, std::string>> Controller::buttons{};
     int Controller::selectedChannel = -1;
     bool Controller::selectedInput = false;
     Processor Controller::processor{};
@@ -115,8 +117,9 @@ namespace Mixijo {
         loadRouting();
     }
 
-    void Controller::refreshDeviceNames() {
-        std::ifstream _file{ "./devices.txt" };
+    void Controller::refreshSettings() {
+        std::ifstream _file{ "./settings.txt" };
+        if (!_file.is_open()) return;
         for (std::string _str; std::getline(_file, _str);) {
             std::string_view _view = _str;
             if (!_view.contains("=") || _view.starts_with("#")) continue;
@@ -129,17 +132,33 @@ namespace Mixijo {
             if (_device == "midiout") midioutDevice = _name;
             if (_device == "samplerate") sampleRate = parse<double>(_name);
             if (_device == "buffersize") bufferSize = parse<int>(_name);
+            if (_device == "maxdb") maxDb = parse<double>(_name), maxLin = std::pow(10, 0.0125 * maxDb);
+            if (_device == "buttons") {
+                auto _list = trim(_name, "[]");
+                auto _links = split(_list, ',');
+
+                buttons.clear();
+
+                for (auto& _link : _links) {
+                    auto _parts = split(_link, ';');
+                    if (_parts.size() != 2) continue;
+                    auto _midiCC = parse<int>(trim(_parts[0]));
+                    auto _file = trim(_parts[1]);
+                    buttons.emplace_back(_midiCC, _file);
+                }
+            }
         }
     }
 
     void Controller::loadDevices() {
         processor.deinit();
-        refreshDeviceNames();
+        refreshSettings();
         processor.init();
     }
 
     void Controller::loadTheme() {
         std::ifstream _file{ "./theme.txt" };
+        if (!_file.is_open()) return;
         theme.reset();
 
         for (std::string _str; std::getline(_file, _str);) {
@@ -247,6 +266,7 @@ namespace Mixijo {
 
         // Load channel settings
         std::ifstream _file{ "./channels.txt" };
+        if (!_file.is_open()) return;
         for (std::string _str; std::getline(_file, _str);) {
             std::string_view _view = _str;
             // # denotes comment line, ':' is part delimiter
@@ -296,6 +316,7 @@ namespace Mixijo {
                 _output = 0;
 
         std::ifstream _file{ "./routing.txt" };
+        if (!_file.is_open()) return;
         for (std::string _str; std::getline(_file, _str);) {
             std::string_view _view = _str;
             if (!_view.contains(":") || _view.starts_with("#")) continue;
@@ -396,35 +417,75 @@ namespace Mixijo {
             if (e.mod & Mods::Control && e.keycode == 'R') {
                 loadChannels();
                 loadRouting();
+                std::cout << "Reloaded channels and routing\n";
             } else if (e.mod & Mods::Control && e.keycode == 'T') {
                 loadTheme();
+                std::cout << "Reloaded theme\n";
             } else if (e.mod & Mods::Control && e.keycode == 'S') {
                 saveRouting();
+                std::cout << "Saved routing\n";
             } else if (e.mod & Mods::Control && e.keycode == 'P') {
-                refreshDeviceNames();
+                refreshSettings();
                 if (Controller::processor.SetSampleRate(Controller::sampleRate) != Audijo::NoError)
                     std::cout << "Failed to set samplerate to " << Controller::sampleRate << "\n";
+                else std::cout << "Set new samplerate to " << Controller::sampleRate << "\n";
+            } else if (e.mod & Mods::Control && e.keycode == 'O') {
+                refreshSettings();
+                std::cout << "Refreshed settings\n";
             } else if (e.mod & Mods::Control && e.keycode == 'D') {
                 saveRouting();
                 loadDevices();
                 loadChannels();
                 loadRouting();
+                std::cout << "Reopened devices\n";
             } else if (e.mod & Mods::Control && e.keycode == 'I') {
+                std::cout << "Opening control panel\n";
                 Controller::processor.OpenControlPanel();
             } else if (e.mod & Mods::Control && e.keycode == 'M') {
                 Controller::processor.midiin.Close();
                 Controller::processor.midiout.Close();
-                refreshDeviceNames();
+                refreshSettings();
                 Controller::processor.initMidi();
+                std::cout << "Reopened midi devices\n";
             } else if (e.mod & Mods::Control && e.keycode == 'L') {
+                if (Controller::processor.Information().state == Audijo::StreamState::Closed) {
+                    std::cout << "no audio device opened\n";
+                    std::cout << "available devices:\n";
+                    for (auto& device : Controller::processor.Devices(true)) {
+                        std::cout << "  " + device.name << "\n";
+                    }
+                    return;
+                }
                 auto& _channels = Controller::processor.endpoints();
                 for (auto& _channel : _channels) {
                     std::cout << _channel.name << ": " << (_channel.input ? "input" : "output") << "\n";
                 }
+                std::cout << "audio device: " << Controller::audioDevice << "\n";
+                std::cout << "midiin device: " << Controller::midiinDevice << "\n";
+                std::cout << "midiout device: " << Controller::midioutDevice << "\n";
+                std::cout << "buffersize: " << Controller::bufferSize << "\n";
+                std::cout << "sampleRate: " << Controller::sampleRate << "\n";
+                std::cout << "maxdb: " << Controller::maxDb << "\n";
+                std::cout << "Buttons: [";
+                for (auto& _button : buttons) {
+                    std::cout << _button.first << ";" << _button.second << ",";
+                }
+                std::cout << "]\n";
             }
         }>();
 
         loadSettings();
+
+        processor.midiin.Callback([&](const Midijo::CC& e) {
+            if (e.Value() == 0) return;
+            for (auto& _link : buttons) {
+                if (_link.first == e.Number()) {
+                    std::cout << "Attempted to run batch file (" << _link.second << ")\n";
+                    std::string _command = "start " + _link.second;
+                    std::system(_command.c_str());
+                }
+            }
+        });
 
         while (_gui.loop()) {
             processor.midiin.HandleEvents();

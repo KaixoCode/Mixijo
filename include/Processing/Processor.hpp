@@ -32,6 +32,8 @@ namespace Mixijo {
 
         std::vector<ChannelInfo>& endpoints() { return Device(Information().input).Channels(); }
 
+        Processor();
+
         bool init();
         Audijo::Error initAudio();
         Midijo::Error initMidi();

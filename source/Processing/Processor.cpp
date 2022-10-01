@@ -26,6 +26,17 @@ namespace Mixijo {
             _input.output_levels.erase(_input.output_levels.begin() + index);
     }
 
+    Processor::Processor() {
+        midiin.Callback([&](const Midijo::Event& e) {
+            if (midiout.Information().state == Midijo::Opened)
+                midiout.Message(e);
+        });
+        midiin.Callback([&](const Midijo::CC& e) {
+            for (auto& _in : inputs) _in.handleMidi(e.Number(), e.Value());
+            for (auto& _out : outputs) _out.handleMidi(e.Number(), e.Value());
+        });
+    }
+
     bool Processor::init() {
         if (initAudio() != Audijo::NoError) return false;
         if (initMidi() != Midijo::NoError) return false;
@@ -51,14 +62,6 @@ namespace Mixijo {
     }
 
     Midijo::Error Processor::initMidi() {
-        midiin.Callback([&](const Midijo::Event& e) {
-            if (midiout.Information().state == Midijo::Opened)
-                midiout.Message(e);
-        });
-        midiin.Callback([&](const Midijo::CC& e) {
-            for (auto& _in : inputs) _in.handleMidi(e.Number(), e.Value());
-            for (auto& _out : outputs) _out.handleMidi(e.Number(), e.Value());
-        });
         auto& _indevices = midiin.Devices(true);
         for (auto& _device : _indevices)
             if (_device.name == Controller::midiinDevice)

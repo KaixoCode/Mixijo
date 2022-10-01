@@ -5,6 +5,7 @@
 
 namespace Mixijo::Gui {
     struct Channel : Object {
+
         int id;
         bool input;
         std::string name;
@@ -27,7 +28,9 @@ namespace Mixijo::Gui {
 
         Pointer<RouteButton> route;
 
-        Channel(int gid, bool in, std::string_view name);
+        Channel(int id, bool in, std::string_view name);
+
+        Dimensions<int> bars() const;
 
         void mousePress(const MousePress& e);
         void mouseClick(const MouseClick& e);
