@@ -81,7 +81,7 @@ namespace Mixijo {
         using string = std::string;
         using boolean = bool;
         using array = std::vector<json>;
-        using object = std::map<std::string, json, std::less<void>>;
+        using object = std::vector<std::pair<std::string, json>>;
         using null = std::nullptr_t;
     private:
         using value = std::variant<floating, integral, unsigned_integral, string, boolean, array, object, null>;
@@ -110,8 +110,9 @@ namespace Mixijo {
          */
         bool contains(std::string_view index) const {
             if (!is(Object)) return false;
-            auto _it = as<object>().find(index);
-            return _it != as<object>().end();
+            for (auto& [key, _] : as<object>())
+                if (key == index) return true;
+            return false;
         }
 
         /**
@@ -122,9 +123,9 @@ namespace Mixijo {
         json& operator[](std::string_view index) {
             if (is(Null)) _value = object{};
             else if (!is(Object)) throw std::exception("Not an object.");
-            auto _it = as<object>().find(index);
-            if (_it == as<object>().end()) return as<object>()[std::string{ index }];
-            else return _it->second;
+            for (auto& [key, val] : as<object>())
+                if (key == index) return val;
+            return as<object>().emplace_back(std::pair{ std::string{ index }, json{} }).second;
         }
 
         /**
