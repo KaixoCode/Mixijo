@@ -51,16 +51,34 @@ This is an example:
 
 `theme`: You can make a custom them! We'll get to this later!
 
-## Channel
-A channel consists of endpoints from the ASIO device, simply put the names of all the ASIO endpoints you want in 
-the channel in the endpoints array in the json, as seen in the example:
-```json
-"endpoints" : [ "Endpoint 1", "Endpoint 2" ]
-```
+## Link Midi
+First you need to select your midi input device in `settings.json`:
 
-You can also map parameters to midi, currently only the gain of a channel can be mapped.
-```json
-"midimapping" : [ { "cc" : 72, "param" : "gain" } ]
+```
+{
+   ...
+   "midiin" : "My Midi Device",
+   ...
+}
+```
+Once you've saved it, go back to Mixijo and press `CTRL + SHIFT + R` to reload the devices.
+You can then map midi controls to parameters, currently only the gain of a channel can be mapped.
+In a channel in your `settings.json`, add a `"midimapping"` field, just like this:
+```
+{ "endpoints" : [...], "name": "My Channel", "midimapping" : [ { "cc" : 72, "param" : "gain" } ] }
+```
+Modify the `"cc"` field to the identifier of the midi control you want to use.
+
+Often you also want to use the same midi device inside your DAW, that's why there's also a `"midiout"` device.
+Mixijo will simply forward all the messages from the midi-in device to the midi-out device. 
+This can be useful if you have a virtual midi device like [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html).
+
+```
+{
+   ...
+   "midiout" : "My Midi Device",
+   ...
+}
 ```
 
 ## Shortkeys
