@@ -2,10 +2,82 @@
 
 Lightweight audio mixer for ASIO devices.
 
-[How To Setup?](#how-to-setup)
 
-[Custom Theme!](#custom-theme)
+## How To Setup
+The easiest way to set Mixijo up is to start it up. 
+The console window should then print the available ASIO devices for you.
+Here's an example of what it could output:
+```
+[Mixijo] 2022-10-02 07:48:25 No audio device found with the name (My Audio Device)
+[Mixijo] 2022-10-02 07:48:25 available audio devices:
+[Mixijo] 2022-10-02 07:48:25   FL Studio ASIO
+[Mixijo] 2022-10-02 07:48:25   Focusrite USB ASIO
+[Mixijo] 2022-10-02 07:48:25   Synchronous Audio Router
+```
+Then you open the `settings.json` file, and edit the `"audio"` field to the device you want to use:
+```
+{
+    "audio": "Synchronous Audio Router",
+    "samplerate": 44100,
+    "buffersize": 256,
+    ...
+}
+```
 
+Once you've saved the new audio device into your `settings.json`, go to Mixijo again, and press `CTRL + SHIFT + R` to reload the devices.
+It should print this:
+```
+[Mixijo] 2022-10-02 07:52:00 Reloaded settings and reopened devices
+```
+Once you've done that, press `CTRL + L` to list the available endpoints, that should look something like this:
+```
+[Mixijo] 2022-10-02 07:52:05 In 1: input
+[Mixijo] 2022-10-02 07:52:05 In 2: input
+[Mixijo] 2022-10-02 07:52:05 Out 1: output
+[Mixijo] 2022-10-02 07:52:05 Out 2: output
+[Mixijo] 2022-10-02 07:52:05 audio device: Synchronous Audio Router
+[Mixijo] 2022-10-02 07:52:05 midiin device:
+[Mixijo] 2022-10-02 07:52:05 midiout device:
+[Mixijo] 2022-10-02 07:52:05 buffersize: 256
+[Mixijo] 2022-10-02 07:52:05 sampleRate: 44100
+```
+You then open the `settings.json` again, so you can add channels using these endpoints. 
+Find the `"channels"` field, and add the output and input channels you need.
+Here's an example:
+```
+{
+    ...
+    "channels" : {
+        "outputs" : [
+            { "endpoints" : [ "Out 1", "Out 2" ], "name" : "Output" }
+        ],
+        "inputs" : [
+            { "endpoints" : [ "In 1" ], "name" : "Microphone" },
+            { "endpoints" : [ "In 2" ], "name" : "Synth" }
+        ]
+    },
+    ...
+}
+```
+Once you added all the channels of your liking, go to Mixijo again and press `CTRL + R` to reload the settings.
+You should then see your channels appear! You can then hide the console window using `CTRL + C`, if you press that again it will reappear.
+
+## Shortkeys
+I couldn't be bothered to add buttons to the UI, so there's some shortkeys for certain actions:
+
+`CTRL + S` Save the current routing (also happens on close and when you modify the routing)
+
+`CTRL + SHIFT + R` Refresh the settings and reopen all the device
+
+`CTRL + R` Refresh settings without reopening all the devices
+
+`CTRL + C` Hide/show the console window
+
+`CTRL + I` Open the ASIO control panel
+
+`CTRL + L` List information about the current device
+
+# Settings
 Mixijo uses a `settings.json` to control your channel configuration, audio device, midi device, samplerate, etc.
 This is an example:
 ```json
@@ -43,7 +115,7 @@ This is an example:
 
 `midiin`: The midi device you want to use to control the midi mappings of the channels with.
 
-`midiout`: Useful when you have a virtual midi device, Mixijo simply forwards all midi messages from the input to this output.
+`midiout`: Useful when you have a virtual midi device, Mixijo simply forwards all midi messages to this output.
 
 `buttons`: You can link buttons on your midi keyboard to batch files, we'll get to this later!
 
@@ -80,21 +152,6 @@ This can be useful if you have a virtual midi device like [loopMIDI](https://www
    ...
 }
 ```
-
-## Shortkeys
-I couldn't be bothered to add buttons to the UI, so there's some shortkeys for certain actions:
-
-`CTRL + S` Save the current routing (also happens on close and when you modify the routing)
-
-`CTRL + SHIFT + R` Refresh the settings and reopen all the device
-
-`CTRL + R` Refresh settings without reopening all the devices
-
-`CTRL + C` Hide/show the console window
-
-`CTRL + I` Open the ASIO control panel
-
-`CTRL + L` List information about the current device
 
 ## Custom Buttons
 In the buttons array of the json you can link midi buttons to executable files, here's an example:
@@ -207,62 +264,3 @@ Here's an example of a custom theme:
 }
 
 ```
-
-## How To Setup
-The easiest way to set Mixijo up is to start it up. 
-The console window should then print the available ASIO devices for you.
-Here's an example of what it could output:
-```
-[Mixijo] 2022-10-02 07:48:25 No audio device found with the name (My Audio Device)
-[Mixijo] 2022-10-02 07:48:25 available audio devices:
-[Mixijo] 2022-10-02 07:48:25   FL Studio ASIO
-[Mixijo] 2022-10-02 07:48:25   Focusrite USB ASIO
-[Mixijo] 2022-10-02 07:48:25   Synchronous Audio Router
-```
-Then you open the `settings.json` file, and edit the `"audio"` field to the device you want to use:
-```
-{
-    "audio": "Synchronous Audio Router",
-    "samplerate": 44100,
-    "buffersize": 256,
-    ...
-}
-```
-
-Once you've saved the new audio device into your `settings.json`, go to Mixijo again, and press `CTRL + SHIFT + R` to reload the devices.
-It should print this:
-```
-[Mixijo] 2022-10-02 07:52:00 Reloaded settings and reopened devices
-```
-Once you've done that, press `CTRL + L` to list the available endpoints, that should look something like this:
-```
-[Mixijo] 2022-10-02 07:52:05 In 1: input
-[Mixijo] 2022-10-02 07:52:05 In 2: input
-[Mixijo] 2022-10-02 07:52:05 Out 1: output
-[Mixijo] 2022-10-02 07:52:05 Out 2: output
-[Mixijo] 2022-10-02 07:52:05 audio device: Synchronous Audio Router
-[Mixijo] 2022-10-02 07:52:05 midiin device:
-[Mixijo] 2022-10-02 07:52:05 midiout device:
-[Mixijo] 2022-10-02 07:52:05 buffersize: 256
-[Mixijo] 2022-10-02 07:52:05 sampleRate: 44100
-```
-You then open the `settings.json` again, so you can add channels using these endpoints. 
-Find the `"channels"` field, and add the output and input channels you need.
-Here's an example:
-```
-{
-    ...
-    "channels" : {
-        "outputs" : [
-            { "endpoints" : [ "Out 1", "Out 2" ], "name" : "Output" }
-        ],
-        "inputs" : [
-            { "endpoints" : [ "In 1" ], "name" : "Microphone" },
-            { "endpoints" : [ "In 2" ], "name" : "Synth" }
-        ]
-    },
-    ...
-}
-```
-Once you added all the channels of your liking, go to Mixijo again and press `CTRL + R` to reload the settings.
-You should then see your channels appear! You can then hide the console window using `CTRL + C`, if you press that again it will reappear.
