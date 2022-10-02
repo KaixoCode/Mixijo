@@ -204,11 +204,31 @@ namespace Mixijo {
                         }
                     }
                     for (auto& [_key, _value] : j.as<json::object>()) {
-                        if (_key == "disabled" && _value.type() == json::Unsigned) t.statelinked.push_back({ Disabled, j["disabled"].as<json::unsigned_integral>() });
-                        if (_key == "hovering" && _value.type() == json::Unsigned) t.statelinked.push_back({ Hovering, j["hovering"].as<json::unsigned_integral>() });
-                        if (_key == "selected" && _value.type() == json::Unsigned) t.statelinked.push_back({ Selected, j["selected"].as<json::unsigned_integral>() });
-                        if (_key == "pressed" && _value.type() == json::Unsigned) t.statelinked.push_back({ Pressed, j["pressed"].as<json::unsigned_integral>() });
-                        if (_key == "focused" && _value.type() == json::Unsigned) t.statelinked.push_back({ Focused, j["focused"].as<json::unsigned_integral>() });
+                        if (_key == "disabled") {
+                            if (_value.type() == json::Unsigned)
+                                t.statelinked.push_back({ Disabled, j["disabled"].as<json::unsigned_integral>() });
+                            else errline("failed to parse \"", name, ".disabled\", expecting unsigned integral.");
+                        }
+                        if (_key == "hovering") {
+                            if (_value.type() == json::Unsigned)
+                                t.statelinked.push_back({ Hovering, j["hovering"].as<json::unsigned_integral>() });
+                            else errline("failed to parse \"", name, ".hovering\", expecting unsigned integral.");
+                        }
+                        if (_key == "selected") {
+                            if (_value.type() == json::Unsigned)
+                                t.statelinked.push_back({ Selected, j["selected"].as<json::unsigned_integral>() });
+                            else errline("failed to parse \"", name, ".selected\", expecting unsigned integral.");
+                        }
+                        if (_key == "pressed") {
+                            if (_value.type() == json::Unsigned)
+                                t.statelinked.push_back({ Pressed, j["pressed"].as<json::unsigned_integral>() });
+                            else errline("failed to parse \"", name, ".pressed\", expecting unsigned integral.");
+                        }
+                        if (_key == "focused") {
+                            if (_value.type() == json::Unsigned)
+                                t.statelinked.push_back({ Focused, j["focused"].as<json::unsigned_integral>() });
+                            else errline("failed to parse \"", name, ".focused\", expecting unsigned integral.");
+                        }
                     }
                 } else {
                     errline("failed to parse number \"", name, "\", expecting unsigned integer or object");
