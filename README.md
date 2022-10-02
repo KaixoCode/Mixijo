@@ -247,4 +247,4 @@ Here's an example:
 }
 ```
 Once you added all the channels of your liking, go to Mixijo again and press `CTRL + R` to reload the settings.
-You should then see your channels appear!
+You should then see your channels appear! You can then hide the console window using `CTRL + C`, if you press that again it will reappear.
