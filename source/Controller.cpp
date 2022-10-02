@@ -24,14 +24,14 @@ namespace Mixijo {
     void Controller::refreshSettings() {
         std::ifstream _file{ "./settings.json" };
         if (!_file.is_open()) {
-            logline("cannot find settings file!");
+            errline("cannot find settings file!");
             return;
         }
         std::string _content{ std::istreambuf_iterator<char>{ _file }, std::istreambuf_iterator<char>{} };
 
         std::optional<json> _result = json::parse(_content);
         if (!_result.has_value()) {
-            logline("cannot parse settings file! Invalid json.");
+            errline("cannot parse settings file! Invalid json.");
             return;
         }
 
@@ -65,21 +65,42 @@ namespace Mixijo {
                 processor.access([&](Processor::Inputs& in, Processor::Outputs& out) {
                     auto& _channel = input ? (Channel&) in.add() : out.add();
 
-                    if (channel.contains("endpoints", json::Array)) {
-                        auto& _endpoints = channel["endpoints"].as<json::array>();
-                        for (auto& _endpoint : _endpoints) if (_endpoint.is(json::String)) {
-                            int _id = processor.find_endpoint(_endpoint.as<json::string>(), input);
-                            if (_id != -1) _channel.add(_id);
+                    if (channel.contains("endpoints")) {
+                        if (channel["endpoints"].is(json::Array)) {
+                            auto& _endpoints = channel["endpoints"].as<json::array>();
+                            for (auto& _endpoint : _endpoints) if (_endpoint.is(json::String)) {
+                                int _id = processor.find_endpoint(_endpoint.as<json::string>(), input);
+                                if (_id != -1) _channel.add(_id);
+                                else {
+                                    errline("could not find endpoint \"", _endpoint.as<json::string>(), "\"");
+                                }
+                            } else {
+                                errline("endpoint should be a string.");
+                            }
+                        } else {
+                            errline("endpoints should be an array of strings.");
                         }
                     }
 
-                    if (channel.contains("midimapping", json::Array)) {
-                        auto& _mapping = channel["midimapping"].as<json::array>();
+                    if (channel.contains("midimapping")) {
+                        if (channel["midimapping"].is(json::Array)) {
+                            auto& _mapping = channel["midimapping"].as<json::array>();
 
-                        for (auto& _map : _mapping) {
-                            if (!_map.is(json::Object)) continue;
-                            if (_map.contains("cc", json::Unsigned) && _map.contains("param", json::String))
-                                _channel.addMidiLink(_map["param"].as<json::string>(), _map["cc"].as<json::unsigned_integral>());
+                            for (auto& _map : _mapping) {
+                                if (!_map.is(json::Object)) {
+                                    errline("failed to parse a midi mapping, should be a json object like this:");
+                                    errline("  { \"cc\": 73, \"param\" : \"gain\" }");
+                                    continue;
+                                }
+                                if (_map.contains("cc", json::Unsigned) && _map.contains("param", json::String)) {
+                                    _channel.addMidiLink(_map["param"].as<json::string>(), _map["cc"].as<json::unsigned_integral>());
+                                } else {
+                                    errline("failed to parse a midi mapping, should be a json object like this:");
+                                    errline("  { \"cc\": 73, \"param\" : \"gain\" }");
+                                }
+                            }
+                        } else {
+                            errline("midimapping should be an array of json objects.");
                         }
                     }
 
@@ -101,11 +122,17 @@ namespace Mixijo {
         if (_json.contains("theme", json::Object)) {
             theme.reset();
             auto& _theme = _json["theme"];
-
-            constexpr auto _decodeColor = [](json& j) -> Color {
-                if (!j.is(json::Array)) return Color{};
+            logline("loading theme...");
+            constexpr auto _decodeColor = [](json& j, auto name) -> Color {
+                if (!j.is(json::Array)) {
+                    errline("failed to parse \"", name, "\", expecting json array.");
+                    return Color{};
+                }
                 for (auto& v : j.as<json::array>())
-                    if (!v.is(json::Unsigned)) return Color{};
+                    if (!v.is(json::Unsigned)) {
+                        errline("failed to parse \"", name, "\", expecting json array with 1 to 4 unsigned integrals.");
+                        return Color{};
+                    }
                 if (j.size() == 1) return Color{
                     static_cast<float>(j[0].as<json::unsigned_integral>())
                 };
@@ -123,30 +150,59 @@ namespace Mixijo {
                     static_cast<float>(j[1].as<json::unsigned_integral>()),
                     static_cast<float>(j[2].as<json::unsigned_integral>()),
                     static_cast<float>(j[3].as<json::unsigned_integral>()),
-                };
-                else return Color{};
+                }; 
+                else {
+                    errline("failed to parse \"", name, "\", expecting json array with 1 to 4 unsigned integrals.");
+                    return Color{};
+                }
             };
 
-            constexpr auto _giveColor = [](auto& t, json& j) {
-                if (j.is(json::Array)) t.value.emplace(_decodeColor(j));
-                else {
-                    if (j.contains("transition", json::Unsigned)) t.transition = j["transition"].as<json::unsigned_integral>();
-                    if (j.contains("color", json::Array)) t.value.emplace(_decodeColor(j["color"]));
-                    for (auto& [_key, _value] : j.as<json::object>()) {
-                        if (_key == "disabled" && _value.type() == json::Array) t.statelinked.push_back({ Disabled, _decodeColor(j["disabled"]) });
-                        if (_key == "hovering" && _value.type() == json::Array) t.statelinked.push_back({ Hovering, _decodeColor(j["hovering"]) });
-                        if (_key == "selected" && _value.type() == json::Array) t.statelinked.push_back({ Selected, _decodeColor(j["selected"]) });
-                        if (_key == "pressed" && _value.type() == json::Array) t.statelinked.push_back({ Pressed, _decodeColor(j["pressed"]) });
-                        if (_key == "focused" && _value.type() == json::Array) t.statelinked.push_back({ Focused, _decodeColor(j["focused"]) });
+            constexpr auto _giveColor = [](auto& t, json& j, auto name) {
+                if (j.is(json::Array)) t.value.emplace(_decodeColor(j, std::string{ name } + ".color"));
+                else if (j.is(json::Object)) {
+                    if (j.contains("transition")) {
+                        if (j["transition"].is(json::Unsigned)) {
+                            t.transition = j["transition"].as<json::unsigned_integral>();
+                        } else {
+                            errline("failed to parse \"", name, ".transition\", expecting unsigned integral.");
+                        }
                     }
+                    if (j.contains("color")) {
+                        if (j["color"].is(json::Array)) {
+                            t.value.emplace(_decodeColor(j["color"], std::string{ name } + ".color"));
+                        } else {
+                            errline("failed to parse \"", name, ".color\", expecting json array.");
+                        }
+                    }
+                    for (auto& [_key, _value] : j.as<json::object>()) {
+                        if (_key == "disabled") t.statelinked.push_back({ Disabled, _decodeColor(j["disabled"], std::string{ name } + ".disabled") });
+                        if (_key == "hovering") t.statelinked.push_back({ Hovering, _decodeColor(j["hovering"], std::string{ name } + ".hovering") });
+                        if (_key == "selected") t.statelinked.push_back({ Selected, _decodeColor(j["selected"], std::string{ name } + ".selected") });
+                        if (_key == "pressed") t.statelinked.push_back({ Pressed, _decodeColor(j["pressed"], std::string{ name } + ".pressed") });
+                        if (_key == "focused") t.statelinked.push_back({ Focused, _decodeColor(j["focused"], std::string{ name } + ".focused") });
+                    }
+                } else {
+                    errline("failed to parse Color \"", name, "\", expecting json array or object");
                 }
             };
             
-            constexpr auto _giveValue = [](auto& t, json& j) {
+            constexpr auto _giveValue = [](auto& t, json& j, auto name) {
                 if (j.is(json::Unsigned)) t.value.emplace(j.as<json::unsigned_integral>());
-                else {
-                    if (j.contains("transition", json::Unsigned)) t.transition = j["transition"].as<json::unsigned_integral>();
-                    if (j.contains("value", json::Unsigned)) t.value.emplace(j["value"].as<json::unsigned_integral>());
+                else if (j.is(json::Object)) {
+                    if (j.contains("transition")) {
+                        if (j["transition"].is(json::Unsigned)) {
+                            t.transition = j["transition"].as<json::unsigned_integral>();
+                        } else {
+                            errline("failed to parse \"", name, ".transition\", expecting unsigned integral.");
+                        }
+                    }
+                    if (j.contains("value")) {
+                        if (j["value"].is(json::Unsigned)) {
+                            t.value.emplace(j["value"].as<json::unsigned_integral>());
+                        } else {
+                            errline("failed to parse \"", name, ".value\", expecting unsigned integral.");
+                        }
+                    }
                     for (auto& [_key, _value] : j.as<json::object>()) {
                         if (_key == "disabled" && _value.type() == json::Unsigned) t.statelinked.push_back({ Disabled, j["disabled"].as<json::unsigned_integral>() });
                         if (_key == "hovering" && _value.type() == json::Unsigned) t.statelinked.push_back({ Hovering, j["hovering"].as<json::unsigned_integral>() });
@@ -154,56 +210,59 @@ namespace Mixijo {
                         if (_key == "pressed" && _value.type() == json::Unsigned) t.statelinked.push_back({ Pressed, j["pressed"].as<json::unsigned_integral>() });
                         if (_key == "focused" && _value.type() == json::Unsigned) t.statelinked.push_back({ Focused, j["focused"].as<json::unsigned_integral>() });
                     }
+                } else {
+                    errline("failed to parse number \"", name, "\", expecting unsigned integer or object");
                 }
             };
 
-            if (_theme.contains("background", json::Array)) _giveColor(theme.background, _theme["background"]);
-            if (_theme.contains("divider", json::Array)) _giveColor(theme.divider, _theme["divider"]);
-            if (_theme.contains("border", json::Array)) _giveColor(theme.border, _theme["border"]);
-            if (_theme.contains("channel", json::Object)) {
+            if (_theme.contains("background")) _giveColor(theme.background, _theme["background"], "theme.background");
+            if (_theme.contains("divider")) _giveColor(theme.divider, _theme["divider"], "theme.divider");
+            if (_theme.contains("border")) _giveColor(theme.border, _theme["border"], "theme.border");
+            if (_theme.contains("channel")) {
                 auto& _channel = _theme["channel"];
-                if (_channel.contains("background", json::Object)) _giveColor(theme.channel.background, _channel["background"]);
-                if (_channel.contains("slider", json::Object)) _giveColor(theme.channel.slider, _channel["slider"]);
-                if (_channel.contains("meter", json::Object)) {
+                if (_channel.contains("background")) _giveColor(theme.channel.background, _channel["background"], "theme.channel.background");
+                if (_channel.contains("slider")) _giveColor(theme.channel.slider, _channel["slider"], "theme.channel.slider");
+                if (_channel.contains("meter")) {
                     auto& _meter = _channel["meter"];
-                    _giveColor(theme.channel.meter, _meter);
-                    if (_meter.contains("text", json::Object)) _giveColor(theme.channel.meterText, _meter["text"]);
-                    if (_meter.contains("line1", json::Object)) _giveColor(theme.channel.meterLine1, _meter["line1"]);
-                    if (_meter.contains("line2", json::Object)) _giveColor(theme.channel.meterLine2, _meter["line2"]);
-                    if (_meter.contains("background", json::Object)) _giveColor(theme.channel.meterBackground, _meter["background"]);
+                    _giveColor(theme.channel.meter, _meter, "meter");
+                    if (_meter.contains("text")) _giveColor(theme.channel.meterText, _meter["text"], "theme.channel.meter.text");
+                    if (_meter.contains("line1")) _giveColor(theme.channel.meterLine1, _meter["line1"], "theme.channel.meter.line1");
+                    if (_meter.contains("line2")) _giveColor(theme.channel.meterLine2, _meter["line2"], "theme.channel.meter.line2");
+                    if (_meter.contains("background")) _giveColor(theme.channel.meterBackground, _meter["background"], "theme.channel.meter.background");
                 }
-                if (_channel.contains("border", json::Object)) {
+                if (_channel.contains("border")) {
                     auto& _border = _channel["border"];
-                    _giveColor(theme.channel.border, _border);
-                    if (_border.contains("width", json::Object)) _giveValue(theme.channel.borderWidth, _border["width"]);
+                    _giveColor(theme.channel.border, _border, "theme.channel.border");
+                    if (_border.contains("width")) _giveValue(theme.channel.borderWidth, _border["width"], "theme.channel.border.width");
                 }
-                if (_channel.contains("title", json::Object)) _giveColor(theme.channel.title, _channel["title"]);
-                if (_channel.contains("value", json::Object)) _giveColor(theme.channel.value, _channel["value"]);
+                if (_channel.contains("title")) _giveColor(theme.channel.title, _channel["title"], "theme.channel.title");
+                if (_channel.contains("value")) _giveColor(theme.channel.value, _channel["value"], "theme.channel.value");
             }
-            if (_theme.contains("routebutton", json::Object)) {
+            if (_theme.contains("routebutton")) {
                 auto& _rbttn = _theme["routebutton"];
-                if (_rbttn.contains("background", json::Object)) _giveColor(theme.routebutton.background, _rbttn["background"]);
-                if (_rbttn.contains("border", json::Object)) {
+                if (_rbttn.contains("background")) _giveColor(theme.routebutton.background, _rbttn["background"], "theme.routebutton.background");
+                if (_rbttn.contains("border")) {
                     auto& _border = _rbttn["border"];
-                    _giveColor(theme.routebutton.border, _border);
-                    if (_border.contains("width", json::Object)) _giveValue(theme.routebutton.borderWidth, _border["width"]);
+                    _giveColor(theme.routebutton.border, _border, "theme.routebutton.border");
+                    if (_border.contains("width")) _giveValue(theme.routebutton.borderWidth, _border["width"], "theme.routebutton.border.width");
                 }
             }
-            if (_theme.contains("close", json::Object)) {
+            if (_theme.contains("close")) {
                 auto& _close = _theme["close"];
-                if (_close.contains("background", json::Object)) _giveColor(theme.close.background, _close["background"]);
-                if (_close.contains("icon", json::Object)) _giveColor(theme.close.icon, _close["icon"]);
+                if (_close.contains("background")) _giveColor(theme.close.background, _close["background"], "theme.close.background");
+                if (_close.contains("icon")) _giveColor(theme.close.icon, _close["icon"], "theme.close.icon");
             }
-            if (_theme.contains("minimize", json::Object)) {
+            if (_theme.contains("minimize")) {
                 auto& _minimize = _theme["minimize"];
-                if (_minimize.contains("background", json::Object)) _giveColor(theme.minimize.background, _minimize["background"]);
-                if (_minimize.contains("icon", json::Object)) _giveColor(theme.minimize.icon, _minimize["icon"]);
+                if (_minimize.contains("background")) _giveColor(theme.minimize.background, _minimize["background"], "theme.minimize.background");
+                if (_minimize.contains("icon")) _giveColor(theme.minimize.icon, _minimize["icon"], "theme.minimize.icon");
             }
-            if (_theme.contains("maximize", json::Object)) {
+            if (_theme.contains("maximize")) {
                 auto& _maximize = _theme["maximize"];
-                if (_maximize.contains("background", json::Object)) _giveColor(theme.maximize.background, _maximize["background"]);
-                if (_maximize.contains("icon", json::Object)) _giveColor(theme.maximize.icon, _maximize["icon"]);
+                if (_maximize.contains("background")) _giveColor(theme.maximize.background, _maximize["background"], "theme.maximize.background");
+                if (_maximize.contains("icon")) _giveColor(theme.maximize.icon, _maximize["icon"], "theme.maximize.icon");
             }
+            logline("loaded theme");
             window->updateTheme(); // Update theme in gui
         }
     }
@@ -322,15 +381,18 @@ namespace Mixijo {
 
         window->event<[](Window& self, const KeyPress& e) {
             if (e.mod & Mods::Control && e.keycode == 'S') {
+                logline("Saving routing...");
                 saveRouting();
                 logline("Saved routing");
             } else if (e.mod & Mods::Control && e.mod & Mods::Shift && e.keycode == 'R') {
+                logline("Reloading settings and reopening devices...");
                 saveRouting();
                 refreshSettings();
                 processor.init();
                 loadRouting();
                 logline("Reloaded settings and reopened devices");
             } else if (e.mod & Mods::Control && e.keycode == 'R') {
+                logline("Reloading settings...");
                 saveRouting();
                 refreshSettings();
                 loadRouting();
@@ -346,30 +408,55 @@ namespace Mixijo {
                     ShowWindow(GetConsoleWindow(), SW_SHOW);
                 }
             } else if (e.mod & Mods::Control && e.keycode == 'I') {
-                logline("Opening control panel");
+                logline("Opening ASIO Control Panel");
                 Controller::processor.OpenControlPanel();
             } else if (e.mod & Mods::Control && e.keycode == 'L') {
+                logline("===========================================");
+                logline("               Information                 ");
+                logline("===========================================");
                 if (Controller::processor.Information().state == Audijo::StreamState::Closed) {
-                    logline("no audio device opened");
-                    logline("available devices:");
+                    logline("no audio device opened, available devices:");
                     for (auto& device : Controller::processor.Devices()) {
-                        logline("  " + device.name);
+                        logline("  ", device.name);
                     }
-                    return;
+                } else {
+                    auto& _channels = Controller::processor.endpoints();
+                    logline("available audio devices:");
+                    for (auto& device : Controller::processor.Devices()) {
+                        logline("  ", device.name);
+                    }
+                    logline("opened audio device: ", Controller::audioDevice);
+                    logline("  inputs:");
+                    for (auto& _channel : _channels) {
+                        if (_channel.input) logline("    ", _channel.name);
+                    }
+                    logline("  outputs:");
+                    for (auto& _channel : _channels) {
+                        if (!_channel.input) logline("    ", _channel.name);
+                    }
                 }
-                auto& _channels = Controller::processor.endpoints();
-                for (auto& _channel : _channels) {
-                    logline(_channel.name, ": ", (_channel.input ? "input" : "output"));
+
+                logline("available midi-in devices:");
+                for (auto& _channel : Controller::processor.midiin.Devices()) {
+                    logline("  ", _channel.name);
                 }
-                logline("audio device: ", Controller::audioDevice);
-                logline("midiin device: ", Controller::midiinDevice);
-                logline("midiout device: ", Controller::midioutDevice);
+                logline("opened midi-in device: ", Controller::midiinDevice);
+
+                logline("available midi-out devices:");
+                for (auto& _channel : Controller::processor.midiout.Devices()) {
+                    logline("  ", _channel.name);
+                }
+                logline("opened midi-out device: ", Controller::midioutDevice);
+
                 logline("buffersize: ", Controller::bufferSize);
                 logline("sampleRate: ", Controller::sampleRate);
-                logline("Buttons: ");
-                for (auto& _button : buttons) {
-                    logline("  ", _button.first, " -> ", _button.second);
+                if (!buttons.empty()) {
+                    logline("Buttons: ");
+                    for (auto& _button : buttons) {
+                        logline("  ", _button.first, " -> ", _button.second);
+                    }
                 }
+                logline("===========================================");
             }
         }>();
 

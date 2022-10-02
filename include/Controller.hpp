@@ -44,21 +44,9 @@ namespace Mixijo {
         static void start();
 
         template<class ...Args>
-        static void log(Args&&... args) {
-            const auto now = std::chrono::system_clock::now();
-            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS} ", now);
-            std::cout << prefix;
-            ((std::cout << args), ...);
-            if (logOutput.is_open()) {
-                logOutput << prefix;
-                ((logOutput << args), ...);
-            }
-        }
-        
-        template<class ...Args>
         static void logline(Args&&... args) {
             const auto now = std::chrono::system_clock::now();
-            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS} ", now);
+            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS} [log] ", now);
             std::cout << prefix;
             ((std::cout << args), ...);
             std::cout << '\n';
@@ -70,13 +58,19 @@ namespace Mixijo {
         }
         
         template<class ...Args>
-        static void logPart(Args&&... args) {
+        static void errline(Args&&... args) {
+            const auto now = std::chrono::system_clock::now();
+            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS} [err] ", now);
+            std::cout << prefix;
             ((std::cout << args), ...);
+            std::cout << '\n';
             if (logOutput.is_open()) {
+                logOutput << prefix;
                 ((logOutput << args), ...);
+                logOutput << '\n';
             }
         }
-
+        
         struct Theme {
             struct {
                 ThemeComponent<Color> background{};

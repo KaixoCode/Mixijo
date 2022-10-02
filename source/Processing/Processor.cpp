@@ -39,8 +39,9 @@ namespace Mixijo {
 
     bool Processor::init() {
         deinit();
-        if (initAudio() != Audijo::NoError) return false;
-        if (initMidi() != Midijo::NoError) return false;
+        bool _success = true;
+        if (initAudio() != Audijo::NoError) _success = false;
+        if (initMidi() != Midijo::NoError) _success = false;
         return true;
     }
 
@@ -59,15 +60,15 @@ namespace Mixijo {
                 if (_res == Audijo::NoError) _res = Start();
                 if (_res != Audijo::NoError) {
                     switch (_res) {
-                    case Audijo::InvalidBufferSize: Controller::logline("Invalid buffer size! (", Controller::bufferSize, ")"); break;
-                    case Audijo::InvalidSampleRate: Controller::logline("Invalid samplerate! (", Controller::sampleRate, ")"); break;
-                    case Audijo::Fail: Controller::logline("Failed to open audio device (", Controller::audioDevice, ")"); break;
+                    case Audijo::InvalidBufferSize: Controller::errline("Invalid buffer size! (", Controller::bufferSize, ")"); break;
+                    case Audijo::InvalidSampleRate: Controller::errline("Invalid samplerate! (", Controller::sampleRate, ")"); break;
+                    case Audijo::Fail: Controller::errline("Failed to open audio device (", Controller::audioDevice, ")"); break;
                     }
                 }
                 return _res;
             }
         }
-        Controller::logline("No audio device found with the name (", Controller::audioDevice, ")");
+        Controller::errline("No audio device found with the name (", Controller::audioDevice, ")");
         Controller::logline("available audio devices:");
         for (auto& device : Devices()) {
             Controller::logline("  " + device.name);
@@ -83,15 +84,16 @@ namespace Mixijo {
                 _found = true;
                 if (_res != Midijo::NoError) {
                     switch (_res) {
-                    case Midijo::InUse: Controller::logline("Midi-in device is already in use (", Controller::midiinDevice, ")"); break;
-                    case Midijo::Fail: Controller::logline("Failed to open midi-in device (", Controller::midiinDevice, ")"); break;
+                    case Midijo::InUse: Controller::errline("Midi-in device is already in use (", Controller::midiinDevice, ")"); break;
+                    case Midijo::Fail: Controller::errline("Failed to open midi-in device (", Controller::midiinDevice, ")"); break;
                     }
                 }
             }
         }
 
-        if (!_found && Controller::midiinDevice != "") {
-            Controller::logline("No midi-in device found with the name (", Controller::midiinDevice, ")");
+        if (!_found) {
+            if (Controller::midiinDevice != "") 
+                Controller::errline("No midi-in device found with the name (", Controller::midiinDevice, ")");
             Controller::logline("available midi-in devices:");
             for (auto& device : midiin.Devices()) {
                 Controller::logline("  " + device.name);
@@ -105,15 +107,16 @@ namespace Mixijo {
                 _found = true;
                 if (_res != Midijo::NoError) {
                     switch (_res) {
-                    case Midijo::InUse: Controller::logline("Midi-out device is already in use (", Controller::midioutDevice, ")"); break;
-                    case Midijo::Fail: Controller::logline("Failed to open midi-out device (", Controller::midioutDevice, ")"); break;
+                    case Midijo::InUse: Controller::errline("Midi-out device is already in use (", Controller::midioutDevice, ")"); break;
+                    case Midijo::Fail: Controller::errline("Failed to open midi-out device (", Controller::midioutDevice, ")"); break;
                     }
                 }
             }
         }
 
-        if (!_found && Controller::midioutDevice != "") {
-            Controller::logline("No midi-out device found with the name (", Controller::midioutDevice, ")");
+        if (!_found) {
+            if (Controller::midioutDevice != "")
+                Controller::errline("No midi-out device found with the name (", Controller::midioutDevice, ")");
             Controller::logline("available midi-out devices:");
             for (auto& device : midiout.Devices()) {
                 Controller::logline("  " + device.name);
