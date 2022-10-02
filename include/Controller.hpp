@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.hpp"
 #include "Processing/Processor.hpp"
+#include "Gui/Frame.hpp"
 
 namespace Mixijo {
 
@@ -21,35 +22,6 @@ namespace Mixijo {
         }
     };
 
-    struct Frame : Window {
-        StateLinked<Animated<Color>> border;
-        StateLinked<Animated<Color>> title;
-
-        struct Button : Object {
-            StateLinked<Animated<Color>> background;
-            StateLinked<Animated<Color>> icon;
-            std::function<void(void)> callback;
-            int type = 0;
-
-            Button(int type);
-
-            void mouseRelease(const MouseRelease& e);
-            void draw(DrawContext& p) const override;
-        };
-
-        Pointer<Button> close{ emplace<Button>(0) };
-        Pointer<Button> maximize{ emplace<Button>(1) };
-        Pointer<Button> minimize{ emplace<Button>(2) };
-        Pointer<Object> mixer;
-
-        Frame(Window::Construct);
-
-        void draw(DrawContext& p) const override;
-        void update() override;
-
-        void updateTheme();
-    };
-
     struct Controller {
         static double maxDb;
         static double maxLin;
@@ -63,15 +35,46 @@ namespace Mixijo {
         static bool selectedInput;
         static Processor processor;
         static Pointer<Frame> window;
+        static std::ofstream logOutput;
 
         static void refreshSettings();
-        static void loadSettings();
-        static void loadChannels();
-        static void loadTheme();
         static void loadRouting();
-        static void loadDevices();
         static void saveRouting();
         static void start();
+
+        template<class ...Args>
+        static void log(Args&&... args) {
+            const auto now = std::chrono::system_clock::now();
+            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS}: ", now);
+            std::cout << prefix;
+            ((std::cout << args), ...);
+            if (logOutput.is_open()) {
+                logOutput << prefix;
+                ((logOutput << args), ...);
+            }
+        }
+        
+        template<class ...Args>
+        static void logline(Args&&... args) {
+            const auto now = std::chrono::system_clock::now();
+            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS}: ", now);
+            std::cout << prefix;
+            ((std::cout << args), ...);
+            std::cout << '\n';
+            if (logOutput.is_open()) {
+                logOutput << prefix;
+                ((logOutput << args), ...);
+                logOutput << '\n';
+            }
+        }
+        
+        template<class ...Args>
+        static void logPart(Args&&... args) {
+            ((std::cout << args), ...);
+            if (logOutput.is_open()) {
+                ((logOutput << args), ...);
+            }
+        }
 
         struct Theme {
             struct {
@@ -113,31 +116,7 @@ namespace Mixijo {
             ThemeComponent<Color> border{};
             ThemeComponent<Color> divider{};
 
-            void reset() {
-                background.reset();
-                divider.reset();
-                border.reset();
-                close.background.reset();
-                close.icon.reset();
-                minimize.background.reset();
-                minimize.icon.reset();
-                maximize.background.reset();
-                maximize.icon.reset();
-                routebutton.background.reset();
-                routebutton.border.reset();
-                routebutton.borderWidth.reset();
-                channel.background.reset();
-                channel.slider.reset();
-                channel.meter.reset();
-                channel.meterBackground.reset();
-                channel.border.reset();
-                channel.meterLine1.reset();
-                channel.meterLine2.reset();
-                channel.meterText.reset();
-                channel.title.reset();
-                channel.value.reset();
-                channel.borderWidth.reset();
-            }
+            void reset();
         };
 
         static Theme theme;

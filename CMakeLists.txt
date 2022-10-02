@@ -10,6 +10,8 @@ set(SRC "${Mixijo_SOURCE_DIR}/")
 file(GLOB_RECURSE SOURCE
   "${SRC}source/*.cpp"
   "${SRC}include/*.hpp"
+  "${SRC}resources/*.h"
+  "${SRC}resources/*.rc"
 )
 
 add_executable(Mixijo
@@ -22,6 +24,7 @@ target_include_directories(Mixijo PUBLIC
   libs/Midijo/include
   libs/Audijo/include
   ${SRC}include
+  ${SRC}resources
 )
 
 source_group(TREE ${SRC} FILES ${SOURCE})

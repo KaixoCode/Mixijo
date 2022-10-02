@@ -2,6 +2,7 @@
 #include "pch.hpp"
 
 namespace Mixijo {
+
     constexpr std::array NUMBERS{ "0",
           "1",  "2",  "3",  "4",  "5",  "6",  "7",  "8",  "9", "10",
          "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
@@ -108,10 +109,10 @@ namespace Mixijo {
          * @param index json key
          * @return true if found, false if not object
          */
-        bool contains(std::string_view index) const {
+        bool contains(std::string_view index, value_type type = Null) const {
             if (!is(Object)) return false;
             for (auto& [key, _] : as<object>())
-                if (key == index) return true;
+                if (key == index) return _.type() == type || type == Null;
             return false;
         }
 

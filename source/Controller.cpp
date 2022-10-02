@@ -2,309 +2,208 @@
 #include "Gui/Mixer.hpp"
 #include "Gui/Channel.hpp"
 #include "Utils.hpp"
+#include "resource.h"
 
 namespace Mixijo {
-
-    Frame::Button::Button(int type) : type(type) {
-        background = Color{ 120, 120, 120, 0 };
-        background[Pressed] = Color{ 120, 120, 120, 150 };
-        background[Hovering] = Color{ 120, 120, 120, 90 };
-        icon = Color{ 250, 250, 250 };
-        link(background);
-        link(icon);
-        event<Button>();
-    }
-
-    void Frame::Button::mouseRelease(const MouseRelease& e) {
-        if (hitbox(e.pos) && callback) callback();
-    }
-
-    void Frame::Button::draw(DrawContext& p) const {
-        p.strokeWeight(0);
-        p.fill(background);
-        p.rect(dimensions());
-        p.fill({ 0, 0, 0, 0 });
-        p.strokeWeight(1);
-        p.stroke(icon);
-        auto _center = dimensions().center();
-        auto _size = 5;
-        switch (type) {
-        case 0:
-            p.line({ _center.x() - _size, _center.y() - _size }, { _center.x() + _size, _center.y() + _size });
-            p.line({ _center.x() - _size, _center.y() + _size }, { _center.x() + _size, _center.y() - _size });
-            break;
-        case 1:
-            p.rect(Dimensions{ _center.x() - _size - 0.5, _center.y() - _size - 0.5, _size * 2, _size * 2 });
-            break;
-        case 2:
-            p.line({ _center.x() - _size, _center.y() }, { _center.x() + _size, _center.y() });
-            break;
-        }
-    }
-
-    Frame::Frame(Window::Construct c) 
-        : Window(c) 
-    {
-        title = Color{ 200, 200, 200 };
-        mixer = emplace<Gui::Mixer>().as<Object>();
-        box.use = false;
-
-        close->callback = [&] {
-            m_ShouldExit = true;
-        };
-
-        maximize->callback = [&] {
-            if (IsMaximized(m_Handle)) ShowWindow(m_Handle, SW_RESTORE);
-            else ShowWindow(m_Handle, SW_MAXIMIZE);
-        };
-
-        minimize->callback = [&] {
-            ShowWindow(m_Handle, SW_MINIMIZE);
-        };
-    }
-
-    void Frame::draw(DrawContext& p) const {
-        p.strokeWeight(0);
-        p.fill(border);
-        p.rect(Dimensions{ 0, 0, width(), height() });
-        Object::draw(p);
-    }
-
-    void Frame::update() {
-        if (IsMaximized(m_Handle)) {
-            mixer->dimensions({ 16, 40, width() - 32, height() - 56 });
-            close->dimensions({ width() - 45 * 1 - 8, 8, 45, 29 });
-            maximize->dimensions({ width() - 45 * 2 - 8, 8, 45, 29 });
-            minimize->dimensions({ width() - 45 * 3 - 8, 8, 45, 29 });
-        } else {
-            mixer->dimensions({ 8, 32, width() - 16, height() - 40 });
-            close->dimensions({ width() - 45 * 1, 0, 45, 29 });
-            maximize->dimensions({ width() - 45 * 2, 0, 45, 29 });
-            minimize->dimensions({ width() - 45 * 3, 0, 45, 29 });
-        }
-        Window::update();
-    }
-
-    void Frame::updateTheme() {
-        Controller::theme.border.assign(border);
-        Controller::theme.close.background.assign(close->background);
-        Controller::theme.close.icon.assign(close->icon);
-        Controller::theme.minimize.background.assign(minimize->background);
-        Controller::theme.minimize.icon.assign(minimize->icon);
-        Controller::theme.maximize.background.assign(maximize->background);
-        Controller::theme.maximize.icon.assign(maximize->icon);
-        mixer.as<Gui::Mixer>()->updateTheme();
-    }
-
     double Controller::maxDb = 12;
     double Controller::maxLin = std::pow(10, 0.0125 * maxDb);
     double Controller::sampleRate = 48000;
     int Controller::bufferSize = 512;
-    std::string Controller::audioDevice;
-    std::string Controller::midiinDevice;
-    std::string Controller::midioutDevice;
+    std::string Controller::audioDevice{};
+    std::string Controller::midiinDevice{};
+    std::string Controller::midioutDevice{};
     std::vector<std::pair<int, std::string>> Controller::buttons{};
     int Controller::selectedChannel = -1;
     bool Controller::selectedInput = false;
     Processor Controller::processor{};
     Pointer<Frame> Controller::window{};
-    Controller::Theme Controller::theme;
-
-    void Controller::loadSettings() {
-        loadDevices();
-        loadChannels();
-        loadTheme();
-        loadRouting();
-    }
+    Controller::Theme Controller::theme{};
+    std::ofstream Controller::logOutput{};
 
     void Controller::refreshSettings() {
-        std::ifstream _file{ "./settings.txt" };
-        if (!_file.is_open()) return;
-        for (std::string _str; std::getline(_file, _str);) {
-            std::string_view _view = _str;
-            if (!_view.contains("=") || _view.starts_with("#")) continue;
-            auto _parts = split(_view, '=');
-            if (_parts.size() != 2) continue;
-            auto _device = trim(_parts[0]);
-            auto _name = trim(_parts[1]);
-            if (_device == "audio") audioDevice = _name;
-            if (_device == "midiin") midiinDevice = _name;
-            if (_device == "midiout") midioutDevice = _name;
-            if (_device == "samplerate") sampleRate = parse<double>(_name);
-            if (_device == "buffersize") bufferSize = parse<int>(_name);
-            if (_device == "maxdb") maxDb = parse<double>(_name), maxLin = std::pow(10, 0.0125 * maxDb);
-            if (_device == "buttons") {
-                auto _list = trim(_name, "[]");
-                auto _links = split(_list, ',');
+        std::ifstream _file{ "./settings.json" };
+        if (!_file.is_open()) {
+            logline("cannot find settings file!");
+            return;
+        }
+        std::string _content{ std::istreambuf_iterator<char>{ _file }, std::istreambuf_iterator<char>{} };
 
-                buttons.clear();
+        std::optional<json> _result = json::parse(_content);
+        if (!_result.has_value()) {
+            logline("cannot parse settings file! Invalid json.");
+            return;
+        }
 
-                for (auto& _link : _links) {
-                    auto _parts = split(_link, ';');
-                    if (_parts.size() != 2) continue;
-                    auto _midiCC = parse<int>(trim(_parts[0]));
-                    auto _file = trim(_parts[1]);
-                    buttons.emplace_back(_midiCC, _file);
+        json& _json = _result.value();
+
+        if (_json.contains("audio", json::String)) audioDevice = _json["audio"].as<json::string>();
+        if (_json.contains("samplerate", json::Unsigned)) sampleRate = _json["samplerate"].as<json::unsigned_integral>();
+        if (_json.contains("buffersize", json::Unsigned)) bufferSize = _json["buffersize"].as<json::unsigned_integral>();
+        if (_json.contains("midiin", json::String)) midiinDevice = _json["midiin"].as<json::string>();
+        if (_json.contains("midiout", json::String)) midioutDevice = _json["midiout"].as<json::string>();
+        if (_json.contains("buttons", json::Array)) {
+            buttons.clear();
+            for (auto& _link : _json["buttons"].as<json::array>()) {
+                if (_link.contains("key", json::Unsigned) && _link.contains("run", json::String)) {
+                    buttons.push_back({
+                        (int)_link["cc"].as<json::unsigned_integral>(),
+                        _link["run"].as<json::string>() 
+                    });
                 }
             }
         }
-    }
+        if (_json.contains("channels", json::Object)) {
+            auto _mixer = window->mixer.as<Gui::Mixer>();
+            _mixer->objects().clear();
+            processor.access([](Processor::Inputs& in, Processor::Outputs& out) {
+                in.clear();
+                out.clear();
+            });
 
-    void Controller::loadDevices() {
-        processor.deinit();
-        refreshSettings();
-        processor.init();
-    }
+            auto _addChannel = [&](json& channel, bool input) {
+                processor.access([&](Processor::Inputs& in, Processor::Outputs& out) {
+                    auto& _channel = input ? (Channel&) in.add() : out.add();
 
-    void Controller::loadTheme() {
-        std::ifstream _file{ "./theme.txt" };
-        if (!_file.is_open()) return;
-        theme.reset();
-
-        for (std::string _str; std::getline(_file, _str);) {
-            std::string_view _view = _str;
-            if (!_view.contains("=") || _view.starts_with("#")) continue;
-            auto _parts = split(_view, '=');
-            if (_parts.size() != 2) continue; // Each theme component has 2 parts
-            auto _selector = _parts[0];       // part 1: selector
-            auto _value = _parts[1];          // part 2: value
-
-            auto _assign = [](auto& part, std::string_view mod, auto value) {
-                if (mod.contains("[")) {
-                    mod = trim(mod, " \t\n\r\f\v[]");
-                    if (mod == "Hovering") part.statelinked.push_back({ Hovering, value });
-                    else if (mod == "Selected") part.statelinked.push_back({ Selected, value });
-                    else if (mod == "Pressed") part.statelinked.push_back({ Pressed, value });
-                    else if (mod == "Focused") part.statelinked.push_back({ Focused, value });
-                    else if (mod == "Disabled") part.statelinked.push_back({ Disabled, value });
-                } else if (mod.contains("transition")) {
-                    if constexpr (!std::same_as<Color, decltype(value)>)
-                        part.transition = value;
-                } else {
-                    part.value.emplace(value);
-                }
-            };
-
-            auto _parseAs = [&]<class Ty>(std::type_identity<Ty>) {
-                if constexpr (std::same_as<Ty, Color>) {
-                    _value = trim(_value, " \t\n\r\f\v{}");
-                    std::vector<std::string_view> _colorVec = split(_value, ',');
-                    if (_colorVec.size() == 4) {
-                        float _r = parse<float>(trim(_colorVec[0]));
-                        float _g = parse<float>(trim(_colorVec[1]));
-                        float _b = parse<float>(trim(_colorVec[2]));
-                        float _a = parse<float>(trim(_colorVec[3]));
-                        return Color{ _r, _g, _b, _a };
-                    } else if (_colorVec.size() == 3) {
-                        float _r = parse<float>(trim(_colorVec[0]));
-                        float _g = parse<float>(trim(_colorVec[1]));
-                        float _b = parse<float>(trim(_colorVec[2]));
-                        return Color{ _r, _g, _b, 255.f };
-                    } else if (_colorVec.size() == 2) {
-                        float _g = parse<float>(trim(_colorVec[0]));
-                        float _a = parse<float>(trim(_colorVec[1]));
-                        return Color{ _g, _g, _g, _a };
-                    } else if (_colorVec.size() == 1) {
-                        float _g = parse<float>(trim(_colorVec[0]));
-                        return Color{ _g, _g, _g, 255. };
+                    if (channel.contains("endpoints", json::Array)) {
+                        auto& _endpoints = channel["endpoints"].as<json::array>();
+                        for (auto& _endpoint : _endpoints) if (_endpoint.is(json::String)) {
+                            int _id = processor.find_endpoint(_endpoint.as<json::string>(), false);
+                            if (_id != -1) _channel.add(_id);
+                        }
                     }
 
-                    return Color{};
-                } else if constexpr (std::is_arithmetic_v<Ty>) {
-                    return parse<Ty>(trim(_value));
-                }
+                    if (channel.contains("midimapping", json::Array)) {
+                        auto& _mapping = channel["midimapping"].as<json::array>();
+
+                        for (auto& _map : _mapping) {
+                            if (!_map.is(json::Object)) continue;
+                            if (_map.contains("cc", json::Unsigned) && _map.contains("param", json::String))
+                                _channel.addMidiLink(_map["param"].as<json::string>(), _map["cc"].as<json::unsigned_integral>());
+                        }
+                    }
+
+                    int _size = input ? in.size() : out.size();
+                    if (channel.contains("name", json::String))
+                        _mixer->emplace<Gui::Channel>(_size - 1, input, channel["name"].as<json::string>());
+                    else _mixer->emplace<Gui::Channel>(_size - 1, input, "channel");
+                });
             };
 
-            auto _tryValue = [&](std::string_view str, auto& part) {
-                if (_selector.starts_with(str)) {
-                    std::string_view _mod = _selector.substr(str.size());
-                    using type = typename std::decay_t<decltype(part)>::type;
-                    if (_mod.contains("transition")) {
-                        _assign(part, _mod, _parseAs(std::type_identity<float>{}));
-                    } else _assign(part, _mod, _parseAs(std::type_identity<type>{}));
-                    return true;
-                }
-                return false;
-            };
-
-            if (_tryValue("close.background", theme.close.background)) continue;
-            if (_tryValue("close.icon", theme.close.icon)) continue;
-            if (_tryValue("minimize.background", theme.minimize.background)) continue;
-            if (_tryValue("minimize.icon", theme.minimize.icon)) continue;
-            if (_tryValue("maximize.background", theme.maximize.background)) continue;
-            if (_tryValue("maximize.icon", theme.maximize.icon)) continue;
-            if (_tryValue("border", theme.border)) continue;
-            if (_tryValue("divider", theme.divider)) continue;
-            if (_tryValue("background", theme.background)) continue;
-            if (_tryValue("routebutton.background", theme.routebutton.background)) continue;
-            if (_tryValue("routebutton.borderWidth", theme.routebutton.borderWidth)) continue;
-            if (_tryValue("routebutton.border", theme.routebutton.border)) continue;
-            if (_tryValue("channel.background", theme.channel.background)) continue;
-            if (_tryValue("channel.slider", theme.channel.slider)) continue;
-            if (_tryValue("channel.borderWidth", theme.channel.borderWidth)) continue;
-            if (_tryValue("channel.meterBackground", theme.channel.meterBackground)) continue;
-            if (_tryValue("channel.meterLine1", theme.channel.meterLine1)) continue;
-            if (_tryValue("channel.meterLine2", theme.channel.meterLine2)) continue;
-            if (_tryValue("channel.meterText", theme.channel.meterText)) continue;
-            if (_tryValue("channel.meter", theme.channel.meter)) continue;
-            if (_tryValue("channel.border", theme.channel.border)) continue;
-            if (_tryValue("channel.title", theme.channel.title)) continue;
-            if (_tryValue("channel.value", theme.channel.value)) continue;
+            auto& _channels = _json["channels"];
+            if (_channels.contains("outputs", json::Array))
+                for (auto& _channel : _channels["outputs"].as<json::array>())
+                    _addChannel(_channel, false);
+            if (_channels.contains("inputs", json::Array))
+                for (auto& _channel : _channels["inputs"].as<json::array>())
+                    _addChannel(_channel, true);
         }
+        if (_json.contains("theme", json::Object)) {
+            theme.reset();
+            auto& _theme = _json["theme"];
 
-        window->updateTheme(); // Update theme in gui
-    }
+            constexpr auto _decodeColor = [](json& j) -> Color {
+                if (!j.is(json::Array)) return Color{};
+                for (auto& v : j.as<json::array>())
+                    if (!v.is(json::Unsigned)) return Color{};
+                if (j.size() == 1) return Color{
+                    static_cast<float>(j[0].as<json::unsigned_integral>())
+                };
+                else if (j.size() == 2) return Color{
+                    static_cast<float>(j[0].as<json::unsigned_integral>()),
+                    static_cast<float>(j[1].as<json::unsigned_integral>()),
+                };
+                else if (j.size() == 3) return Color{
+                    static_cast<float>(j[0].as<json::unsigned_integral>()),
+                    static_cast<float>(j[1].as<json::unsigned_integral>()),
+                    static_cast<float>(j[2].as<json::unsigned_integral>()),
+                };
+                else if (j.size() == 4) return Color{
+                    static_cast<float>(j[0].as<json::unsigned_integral>()),
+                    static_cast<float>(j[1].as<json::unsigned_integral>()),
+                    static_cast<float>(j[2].as<json::unsigned_integral>()),
+                    static_cast<float>(j[3].as<json::unsigned_integral>()),
+                };
+                else return Color{};
+            };
 
-    void Controller::loadChannels() {
-        // Get gui mixer object
-        auto _mixer = window->mixer.as<Gui::Mixer>();
-        _mixer->objects().clear(); 
-        processor.access([](Processor::Inputs& in, Processor::Outputs& out) {
-            in.clear();
-            out.clear();
-        });
-
-        // Load channel settings
-        std::ifstream _file{ "./channels.txt" };
-        if (!_file.is_open()) return;
-        for (std::string _str; std::getline(_file, _str);) {
-            std::string_view _view = _str;
-            // # denotes comment line, ':' is part delimiter
-            if (!_view.contains(":") || _view.starts_with("#")) continue;
-            auto _parts = split(_view, ':');
-            if (_parts.size() != 4) continue;                   // Each channel has 4 parts
-            auto _type = trim(_parts[0]);                       // part 1: channel type: input/output
-            auto _endpoints = trim(_parts[1], " \t\n\r\f\v[]"); // part 2: array with names all connected endpoints
-            auto _name = trim(_parts[2]);                       // part 3: displayed name of channel
-            auto _midi = trim(_parts[3], " \t\n\r\f\v[]");      // part 4: array of named midi links
-            auto _input = _type == "input";
-
-            // Access the processor channels in a threadsafe manner
-            processor.access([&](Processor::Inputs& in, Processor::Outputs& out) {
-                Channel& _channel = _input
-                    ? static_cast<Channel&>(in.add())
-                    : static_cast<Channel&>(out.add());
-
-                std::vector<std::string_view> _endpointsVec = split(_endpoints, ',');
-                for (std::string_view _e : _endpointsVec) {
-                    _e = trim(_e);
-                    int _id = processor.find_endpoint(_e, _input);
-                    if (_id != -1) _channel.add(_id);
+            constexpr auto _giveColor = [](auto& t, json& j) {
+                if (j.is(json::Array)) t.value.emplace(_decodeColor(j));
+                else {
+                    if (j.contains("transition", json::Unsigned)) t.transition = j["transition"].as<json::unsigned_integral>();
+                    if (j.contains("color", json::Array)) t.value.emplace(_decodeColor(j["color"]));
+                    for (auto& [_key, _value] : j.as<json::object>()) {
+                        if (_key == "disabled" && _value.type() == json::Array) t.statelinked.push_back({ Disabled, _decodeColor(j["disabled"]) });
+                        if (_key == "hovering" && _value.type() == json::Array) t.statelinked.push_back({ Hovering, _decodeColor(j["hovering"]) });
+                        if (_key == "selected" && _value.type() == json::Array) t.statelinked.push_back({ Selected, _decodeColor(j["selected"]) });
+                        if (_key == "pressed" && _value.type() == json::Array) t.statelinked.push_back({ Pressed, _decodeColor(j["pressed"]) });
+                        if (_key == "focused" && _value.type() == json::Array) t.statelinked.push_back({ Focused, _decodeColor(j["focused"]) });
+                    }
                 }
-
-                std::vector<std::string_view> _midiVec = split(_midi, ',');
-                for (std::string_view _midiAssignment : _midiVec) {
-                    _midiAssignment = trim(_midiAssignment);
-                    auto _parts = split(_midiAssignment, '=');
-                    if (_parts.size() != 2) continue; // 'name=CC id'
-                    auto _param = _parts[0];                // part 1: parameter name
-                    int _link = parse<int>(_parts[1]); // part 2: CC id, vvv parse int from string vvv
-                    _channel.addMidiLink(_param, _link);
+            };
+            
+            constexpr auto _giveValue = [](auto& t, json& j) {
+                if (j.is(json::Unsigned)) t.value.emplace(j.as<json::unsigned_integral>());
+                else {
+                    if (j.contains("transition", json::Unsigned)) t.transition = j["transition"].as<json::unsigned_integral>();
+                    if (j.contains("value", json::Unsigned)) t.value.emplace(j["value"].as<json::unsigned_integral>());
+                    for (auto& [_key, _value] : j.as<json::object>()) {
+                        if (_key == "disabled" && _value.type() == json::Unsigned) t.statelinked.push_back({ Disabled, j["disabled"].as<json::unsigned_integral>() });
+                        if (_key == "hovering" && _value.type() == json::Unsigned) t.statelinked.push_back({ Hovering, j["hovering"].as<json::unsigned_integral>() });
+                        if (_key == "selected" && _value.type() == json::Unsigned) t.statelinked.push_back({ Selected, j["selected"].as<json::unsigned_integral>() });
+                        if (_key == "pressed" && _value.type() == json::Unsigned) t.statelinked.push_back({ Pressed, j["pressed"].as<json::unsigned_integral>() });
+                        if (_key == "focused" && _value.type() == json::Unsigned) t.statelinked.push_back({ Focused, j["focused"].as<json::unsigned_integral>() });
+                    }
                 }
+            };
 
-                int size = _input ? in.size() : out.size();
-                _mixer->emplace<Gui::Channel>(size - 1, _input, _name);
-            });
+            if (_theme.contains("background", json::Array)) _giveColor(theme.background, _theme["background"]);
+            if (_theme.contains("divider", json::Array)) _giveColor(theme.divider, _theme["divider"]);
+            if (_theme.contains("border", json::Array)) _giveColor(theme.border, _theme["border"]);
+            if (_theme.contains("channel", json::Object)) {
+                auto& _channel = _theme["channel"];
+                if (_channel.contains("background", json::Object)) _giveColor(theme.channel.background, _channel["background"]);
+                if (_channel.contains("slider", json::Object)) _giveColor(theme.channel.slider, _channel["slider"]);
+                if (_channel.contains("meter", json::Object)) {
+                    auto& _meter = _channel["meter"];
+                    _giveColor(theme.channel.meter, _meter);
+                    if (_meter.contains("text", json::Object)) _giveColor(theme.channel.meterText, _meter["text"]);
+                    if (_meter.contains("line1", json::Object)) _giveColor(theme.channel.meterLine1, _meter["line1"]);
+                    if (_meter.contains("line2", json::Object)) _giveColor(theme.channel.meterLine2, _meter["line2"]);
+                    if (_meter.contains("background", json::Object)) _giveColor(theme.channel.meterBackground, _meter["background"]);
+                }
+                if (_channel.contains("border", json::Object)) {
+                    auto& _border = _channel["border"];
+                    _giveColor(theme.channel.border, _border);
+                    if (_border.contains("width", json::Object)) _giveValue(theme.channel.borderWidth, _border["width"]);
+                }
+                if (_channel.contains("title", json::Object)) _giveColor(theme.channel.title, _channel["title"]);
+                if (_channel.contains("value", json::Object)) _giveColor(theme.channel.value, _channel["value"]);
+            }
+            if (_theme.contains("routebutton", json::Object)) {
+                auto& _rbttn = _theme["routebutton"];
+                if (_rbttn.contains("background", json::Object)) _giveColor(theme.routebutton.background, _rbttn["background"]);
+                if (_rbttn.contains("border", json::Object)) {
+                    auto& _border = _rbttn["border"];
+                    _giveColor(theme.routebutton.border, _border);
+                    if (_border.contains("width", json::Object)) _giveValue(theme.routebutton.borderWidth, _border["width"]);
+                }
+            }
+            if (_theme.contains("close", json::Object)) {
+                auto& _close = _theme["close"];
+                if (_close.contains("background", json::Object)) _giveColor(theme.close.background, _close["background"]);
+                if (_close.contains("icon", json::Object)) _giveColor(theme.close.icon, _close["icon"]);
+            }
+            if (_theme.contains("minimize", json::Object)) {
+                auto& _minimize = _theme["minimize"];
+                if (_minimize.contains("background", json::Object)) _giveColor(theme.minimize.background, _minimize["background"]);
+                if (_minimize.contains("icon", json::Object)) _giveColor(theme.minimize.icon, _minimize["icon"]);
+            }
+            if (_theme.contains("maximize", json::Object)) {
+                auto& _maximize = _theme["maximize"];
+                if (_maximize.contains("background", json::Object)) _giveColor(theme.maximize.background, _maximize["background"]);
+                if (_maximize.contains("icon", json::Object)) _giveColor(theme.maximize.icon, _maximize["icon"]);
+            }
+            window->updateTheme(); // Update theme in gui
         }
     }
 
@@ -407,80 +306,65 @@ namespace Mixijo {
     }
 
     void Controller::start() {
+        std::filesystem::path _logpath = "logs/";
+        if (!std::filesystem::exists(_logpath))
+            std::filesystem::create_directory("logs/");
+        logOutput.open(std::format("logs/mixijo_{:%EY%Om%Od_%OH%OM%OS}.log", std::chrono::system_clock::now()));
+
         Guijo::Gui _gui;
         window = _gui.emplace<Frame>(Window::Construct{
             .name = "Mixijo",
             .dimensions { -1, -1, 1000, 500 },
         });
 
+        window->setIcon(IDI_ICON1);
+
         window->event<[](Window& self, const KeyPress& e) {
-            if (e.mod & Mods::Control && e.keycode == 'R') {
-                loadChannels();
-                loadRouting();
-                std::cout << "Reloaded channels and routing\n";
-            } else if (e.mod & Mods::Control && e.keycode == 'T') {
-                loadTheme();
-                std::cout << "Reloaded theme\n";
-            } else if (e.mod & Mods::Control && e.keycode == 'S') {
+            if (e.mod & Mods::Control && e.keycode == 'S') {
                 saveRouting();
-                std::cout << "Saved routing\n";
-            } else if (e.mod & Mods::Control && e.keycode == 'P') {
-                refreshSettings();
-                if (Controller::processor.SetSampleRate(Controller::sampleRate) != Audijo::NoError)
-                    std::cout << "Failed to set samplerate to " << Controller::sampleRate << "\n";
-                else std::cout << "Set new samplerate to " << Controller::sampleRate << "\n";
-            } else if (e.mod & Mods::Control && e.keycode == 'O') {
-                refreshSettings();
-                std::cout << "Refreshed settings\n";
-            } else if (e.mod & Mods::Control && e.keycode == 'D') {
+                logline("Saved routing");
+            } else if (e.mod & Mods::Control && e.keycode == 'R') {
                 saveRouting();
-                loadDevices();
-                loadChannels();
+                refreshSettings();
                 loadRouting();
-                std::cout << "Reopened devices\n";
+                logline("Reloaded settings");
             } else if (e.mod & Mods::Control && e.keycode == 'I') {
-                std::cout << "Opening control panel\n";
+                logline("Opening control panel");
                 Controller::processor.OpenControlPanel();
-            } else if (e.mod & Mods::Control && e.keycode == 'M') {
-                Controller::processor.midiin.Close();
-                Controller::processor.midiout.Close();
-                refreshSettings();
-                Controller::processor.initMidi();
-                std::cout << "Reopened midi devices\n";
             } else if (e.mod & Mods::Control && e.keycode == 'L') {
                 if (Controller::processor.Information().state == Audijo::StreamState::Closed) {
-                    std::cout << "no audio device opened\n";
-                    std::cout << "available devices:\n";
+                    logline("no audio device opened");
+                    logline("available devices:");
                     for (auto& device : Controller::processor.Devices(true)) {
-                        std::cout << "  " + device.name << "\n";
+                        logline("  " + device.name);
                     }
                     return;
                 }
                 auto& _channels = Controller::processor.endpoints();
                 for (auto& _channel : _channels) {
-                    std::cout << _channel.name << ": " << (_channel.input ? "input" : "output") << "\n";
+                    logline(_channel.name, ": ", (_channel.input ? "input" : "output"));
                 }
-                std::cout << "audio device: " << Controller::audioDevice << "\n";
-                std::cout << "midiin device: " << Controller::midiinDevice << "\n";
-                std::cout << "midiout device: " << Controller::midioutDevice << "\n";
-                std::cout << "buffersize: " << Controller::bufferSize << "\n";
-                std::cout << "sampleRate: " << Controller::sampleRate << "\n";
-                std::cout << "maxdb: " << Controller::maxDb << "\n";
-                std::cout << "Buttons: [";
+                logline("audio device: ", Controller::audioDevice);
+                logline("midiin device: ", Controller::midiinDevice);
+                logline("midiout device: ", Controller::midioutDevice);
+                logline("buffersize: ", Controller::bufferSize);
+                logline("sampleRate: ", Controller::sampleRate);
+                logline("Buttons: ");
                 for (auto& _button : buttons) {
-                    std::cout << _button.first << ";" << _button.second << ",";
+                    logline("  ", _button.first, " -> ", _button.second);
                 }
-                std::cout << "]\n";
             }
         }>();
 
-        loadSettings();
+        refreshSettings();
+        processor.init();
+        loadRouting();
 
         processor.midiin.Callback([&](const Midijo::CC& e) {
             if (e.Value() == 0) return;
             for (auto& _link : buttons) {
                 if (_link.first == e.Number()) {
-                    std::cout << "Attempted to run batch file (" << _link.second << ")\n";
+                    log("Attempted to run batch file (", _link.second, ")");
                     std::string _command = "start " + _link.second;
                     std::system(_command.c_str());
                 }
@@ -491,6 +375,33 @@ namespace Mixijo {
             processor.midiin.HandleEvents();
         }
 
+        saveRouting();
         processor.deinit();
+    }
+
+    void Controller::Theme::reset() {
+        background.reset();
+        divider.reset();
+        border.reset();
+        close.background.reset();
+        close.icon.reset();
+        minimize.background.reset();
+        minimize.icon.reset();
+        maximize.background.reset();
+        maximize.icon.reset();
+        routebutton.background.reset();
+        routebutton.border.reset();
+        routebutton.borderWidth.reset();
+        channel.background.reset();
+        channel.slider.reset();
+        channel.meter.reset();
+        channel.meterBackground.reset();
+        channel.border.reset();
+        channel.meterLine1.reset();
+        channel.meterLine2.reset();
+        channel.meterText.reset();
+        channel.title.reset();
+        channel.value.reset();
+        channel.borderWidth.reset();
     }
 }

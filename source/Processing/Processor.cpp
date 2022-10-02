@@ -38,6 +38,7 @@ namespace Mixijo {
     }
 
     bool Processor::init() {
+        deinit();
         if (initAudio() != Audijo::NoError) return false;
         if (initMidi() != Midijo::NoError) return false;
         return true;
@@ -56,20 +57,47 @@ namespace Mixijo {
                     .sampleRate = Controller::sampleRate,
                 });
                 if (_res == Audijo::NoError) _res = Start();
+                if (_res != Audijo::NoError) {
+                    switch (_res) {
+                    case Audijo::InvalidBufferSize: Controller::logline("Invalid buffer size! (", Controller::bufferSize, ")"); break;
+                    case Audijo::InvalidSampleRate: Controller::logline("Invalid samplerate! (", Controller::sampleRate, ")"); break;
+                    case Audijo::Fail: Controller::logline("Failed to open audio device (", Controller::audioDevice, ")"); break;
+                    }
+                }
                 return _res;
             }
+        }
+        Controller::logline("No audio device found with the name (", Controller::audioDevice, ")");
+        Controller::logline("available audio devices:");
+        for (auto& device : Devices(true)) {
+            Controller::logline("  " + device.name);
         }
     }
 
     Midijo::Error Processor::initMidi() {
         auto& _indevices = midiin.Devices(true);
         for (auto& _device : _indevices)
-            if (_device.name == Controller::midiinDevice)
-                midiin.Open({ .device = _device.id, .async = false });
+            if (_device.name == Controller::midiinDevice) {
+                auto _res = midiin.Open({ .device = _device.id, .async = false });
+            
+                if (_res != Midijo::NoError) {
+                    switch (_res) {
+                    case Midijo::InUse: Controller::logline("Midi-in device is already in use (", Controller::midiinDevice, ")"); break;
+                    case Midijo::Fail: Controller::logline("Failed to open midi-in device (", Controller::midiinDevice, ")"); break;
+                    }
+                }
+            }
         auto& _outdevices = midiout.Devices(true);
         for (auto& _device : _outdevices)
-            if (_device.name == Controller::midioutDevice)
-                midiout.Open({ .device = _device.id, .async = false });
+            if (_device.name == Controller::midioutDevice) {
+                auto _res = midiout.Open({ .device = _device.id, .async = false });
+                if (_res != Midijo::NoError) {
+                    switch (_res) {
+                    case Midijo::InUse: Controller::logline("Midi-out device is already in use (", Controller::midioutDevice, ")"); break;
+                    case Midijo::Fail: Controller::logline("Failed to open midi-out device (", Controller::midioutDevice, ")"); break;
+                    }
+                }
+            }
         return Midijo::NoError;
     }
 
