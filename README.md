@@ -2,6 +2,10 @@
 
 Lightweight audio mixer for ASIO devices.
 
+[How To Setup?](#how-to-setup)
+
+[Custom Theme!](#custom-theme)
+
 Mixijo uses a `settings.json` to control your channel configuration, audio device, midi device, samplerate, etc.
 This is an example:
 ```json
@@ -108,6 +112,7 @@ channel.value
 channel.borderWidth
 ```
 Most of those properties are also linked to state, so you can define a different color for `hovering`, `focused`, `pressed`, `selected`, and `disabled`.
+Colors are encoded in json as an array of integers: `[gray]`, `[gray, alpha]`, `[r, g, b]`, `[r, g, b, alpha]`.
 Here's an example of a custom theme:
 ```json
 "theme" : {
