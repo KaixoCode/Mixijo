@@ -177,7 +177,7 @@ namespace Mixijo {
         static std::string removeDoubleEscapes(std::string_view str) {
             std::string _str{ str };
             for (auto _i = _str.begin(); _i != _str.end();)
-                if (*_i == '\\') _i = _str.erase(_i); else ++_i;
+                if (*_i == '\\') ++(_i = _str.erase(_i)); else ++_i;
             return _str;
         }
 
@@ -248,8 +248,20 @@ namespace Mixijo {
                 std::size_t _index = _json.find_first_of('"');   // find next '"'
                 if (_index == std::string_view::npos) return {}; // if not exist, invalid string
                 if (_result[_offset + _index - 1] == '\\') {     // if escaped
-                    _offset += _index + 1;                       //   add offset
-                    _json = _result.substr(_offset);             //   remove suffix from search
+                    std::size_t _check = _offset + _index - 1;   //
+                    std::size_t _count = 0;                      //
+                    while (_result[_check] == '\\') {            // count how many there are
+                        ++_count;                                //
+                        if (_check-- == 0) break;                //
+                    }                                            // if even amount, the '\'
+                    if (_count % 2 == 0) {                       // itself is escaped, so this is the end
+                        val = _result.substr(_offset + _index + 1);  //   remove from remainder
+                        return removeDoubleEscapes(_result.substr(1, _offset + _index - 1));
+                    }
+                    else {
+                        _offset += _index + 1;                       //   add offset
+                        _json = _result.substr(_offset);             //   remove suffix from search
+                    }
                 }
                 else {                                         // else not escaped
                     val = _result.substr(_offset + _index + 1);  //   remove from remainder

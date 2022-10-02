@@ -15,6 +15,7 @@ namespace Mixijo {
     std::vector<std::pair<int, std::string>> Controller::buttons{};
     int Controller::selectedChannel = -1;
     bool Controller::selectedInput = false;
+    bool Controller::showConsole = true;
     Processor Controller::processor{};
     Pointer<Frame> Controller::window{};
     Controller::Theme Controller::theme{};
@@ -44,7 +45,7 @@ namespace Mixijo {
         if (_json.contains("buttons", json::Array)) {
             buttons.clear();
             for (auto& _link : _json["buttons"].as<json::array>()) {
-                if (_link.contains("key", json::Unsigned) && _link.contains("run", json::String)) {
+                if (_link.contains("cc", json::Unsigned) && _link.contains("run", json::String)) {
                     buttons.push_back({
                         (int)_link["cc"].as<json::unsigned_integral>(),
                         _link["run"].as<json::string>() 
@@ -67,7 +68,7 @@ namespace Mixijo {
                     if (channel.contains("endpoints", json::Array)) {
                         auto& _endpoints = channel["endpoints"].as<json::array>();
                         for (auto& _endpoint : _endpoints) if (_endpoint.is(json::String)) {
-                            int _id = processor.find_endpoint(_endpoint.as<json::string>(), false);
+                            int _id = processor.find_endpoint(_endpoint.as<json::string>(), input);
                             if (_id != -1) _channel.add(_id);
                         }
                     }
@@ -323,11 +324,27 @@ namespace Mixijo {
             if (e.mod & Mods::Control && e.keycode == 'S') {
                 saveRouting();
                 logline("Saved routing");
+            } else if (e.mod & Mods::Control && e.mod & Mods::Shift && e.keycode == 'R') {
+                saveRouting();
+                refreshSettings();
+                processor.init();
+                loadRouting();
+                logline("Reloaded settings and reopened devices");
             } else if (e.mod & Mods::Control && e.keycode == 'R') {
                 saveRouting();
                 refreshSettings();
                 loadRouting();
                 logline("Reloaded settings");
+            } else if (e.mod & Mods::Control && e.keycode == 'C') {
+                if (Controller::showConsole) {
+                    Controller::showConsole = false;
+                    logline("Hiding console window");
+                    ShowWindow(GetConsoleWindow(), SW_HIDE);
+                } else {
+                    Controller::showConsole = true;
+                    logline("Showing console window");
+                    ShowWindow(GetConsoleWindow(), SW_SHOW);
+                }
             } else if (e.mod & Mods::Control && e.keycode == 'I') {
                 logline("Opening control panel");
                 Controller::processor.OpenControlPanel();
@@ -335,7 +352,7 @@ namespace Mixijo {
                 if (Controller::processor.Information().state == Audijo::StreamState::Closed) {
                     logline("no audio device opened");
                     logline("available devices:");
-                    for (auto& device : Controller::processor.Devices(true)) {
+                    for (auto& device : Controller::processor.Devices()) {
                         logline("  " + device.name);
                     }
                     return;
@@ -358,13 +375,14 @@ namespace Mixijo {
 
         refreshSettings();
         processor.init();
+        refreshSettings();
         loadRouting();
 
         processor.midiin.Callback([&](const Midijo::CC& e) {
             if (e.Value() == 0) return;
             for (auto& _link : buttons) {
                 if (_link.first == e.Number()) {
-                    log("Attempted to run batch file (", _link.second, ")");
+                    logline("Attempted to run file (", _link.second, ")");
                     std::string _command = "start " + _link.second;
                     std::system(_command.c_str());
                 }

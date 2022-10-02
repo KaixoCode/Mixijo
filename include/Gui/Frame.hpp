@@ -22,6 +22,7 @@ namespace Mixijo {
         Pointer<Button> maximize{ emplace<Button>(1) };
         Pointer<Button> minimize{ emplace<Button>(2) };
         Pointer<Object> mixer;
+        bool initialResize = false;
 
         Frame(Window::Construct);
 

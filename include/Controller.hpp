@@ -33,6 +33,7 @@ namespace Mixijo {
         static std::vector<std::pair<int, std::string>> buttons;
         static int selectedChannel;
         static bool selectedInput;
+        static bool showConsole;
         static Processor processor;
         static Pointer<Frame> window;
         static std::ofstream logOutput;
@@ -45,7 +46,7 @@ namespace Mixijo {
         template<class ...Args>
         static void log(Args&&... args) {
             const auto now = std::chrono::system_clock::now();
-            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS}: ", now);
+            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS} ", now);
             std::cout << prefix;
             ((std::cout << args), ...);
             if (logOutput.is_open()) {
@@ -57,7 +58,7 @@ namespace Mixijo {
         template<class ...Args>
         static void logline(Args&&... args) {
             const auto now = std::chrono::system_clock::now();
-            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS}: ", now);
+            std::string prefix = std::format("[Mixijo] {:%EY-%Om-%Od %OH:%OM:%OS} ", now);
             std::cout << prefix;
             ((std::cout << args), ...);
             std::cout << '\n';

@@ -69,17 +69,18 @@ namespace Mixijo {
         }
         Controller::logline("No audio device found with the name (", Controller::audioDevice, ")");
         Controller::logline("available audio devices:");
-        for (auto& device : Devices(true)) {
+        for (auto& device : Devices()) {
             Controller::logline("  " + device.name);
         }
     }
 
     Midijo::Error Processor::initMidi() {
         auto& _indevices = midiin.Devices(true);
-        for (auto& _device : _indevices)
+        bool _found = false;
+        for (auto& _device : _indevices) {
             if (_device.name == Controller::midiinDevice) {
                 auto _res = midiin.Open({ .device = _device.id, .async = false });
-            
+                _found = true;
                 if (_res != Midijo::NoError) {
                     switch (_res) {
                     case Midijo::InUse: Controller::logline("Midi-in device is already in use (", Controller::midiinDevice, ")"); break;
@@ -87,10 +88,21 @@ namespace Mixijo {
                     }
                 }
             }
+        }
+
+        if (!_found && Controller::midiinDevice != "") {
+            Controller::logline("No midi-in device found with the name (", Controller::midiinDevice, ")");
+            Controller::logline("available midi-in devices:");
+            for (auto& device : midiin.Devices()) {
+                Controller::logline("  " + device.name);
+            }
+        }
+        _found = false;
         auto& _outdevices = midiout.Devices(true);
-        for (auto& _device : _outdevices)
+        for (auto& _device : _outdevices) {
             if (_device.name == Controller::midioutDevice) {
                 auto _res = midiout.Open({ .device = _device.id, .async = false });
+                _found = true;
                 if (_res != Midijo::NoError) {
                     switch (_res) {
                     case Midijo::InUse: Controller::logline("Midi-out device is already in use (", Controller::midioutDevice, ")"); break;
@@ -98,6 +110,15 @@ namespace Mixijo {
                     }
                 }
             }
+        }
+
+        if (!_found && Controller::midioutDevice != "") {
+            Controller::logline("No midi-out device found with the name (", Controller::midioutDevice, ")");
+            Controller::logline("available midi-out devices:");
+            for (auto& device : midiout.Devices()) {
+                Controller::logline("  " + device.name);
+            }
+        }
         return Midijo::NoError;
     }
 

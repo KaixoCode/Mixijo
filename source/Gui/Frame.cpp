@@ -70,6 +70,7 @@ namespace Mixijo {
     }
 
     void Frame::update() {
+        if (!initialResize) width(width()), initialResize = true;
         if (IsMaximized(m_Handle)) {
             mixer->dimensions({ 16, 40, width() - 32, height() - 56 });
             close->dimensions({ width() - 45 * 1 - 8, 8, 45, 29 });
