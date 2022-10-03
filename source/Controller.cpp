@@ -21,6 +21,127 @@ namespace Mixijo {
     Controller::Theme Controller::theme{};
     std::ofstream Controller::logOutput{};
 
+    void Controller::start() {
+        std::filesystem::path _logpath = "logs/";
+        if (!std::filesystem::exists(_logpath))
+            std::filesystem::create_directory("logs/");
+        logOutput.open(std::format("logs/mixijo_{:%EY%Om%Od_%OH%OM%OS}.log", std::chrono::system_clock::now()));
+
+        Guijo::Gui _gui;
+        window = _gui.emplace<Frame>(Window::Construct{
+            .name = "Mixijo",
+            .dimensions { -1, -1, 1000, 500 },
+        });
+
+        window->setIcon(IDI_ICON1);
+
+        window->event<[](Window& self, const KeyPress& e) {
+            switch(e) {
+            case Mods::Control | 'S':
+                logline("Saving routing...");
+                saveRouting();
+                logline("Saved routing");
+                break;
+            case Mods::Control | Mods::Shift | 'R':
+                logline("Reloading settings and reopening devices...");
+                saveRouting();
+                refreshSettings();
+                processor.init();
+                refreshSettings();
+                loadRouting();
+                logline("Reloaded settings and reopened devices");
+                break;
+            case Mods::Control | 'R':
+                logline("Reloading settings...");
+                saveRouting();
+                refreshSettings();
+                loadRouting();
+                logline("Reloaded settings");
+                break;
+            case Mods::Control | 'C':
+                if (Controller::showConsole) {
+                    Controller::showConsole = false;
+                    logline("Hiding console window");
+                    ShowWindow(GetConsoleWindow(), SW_HIDE);
+                } else {
+                    Controller::showConsole = true;
+                    logline("Showing console window");
+                    ShowWindow(GetConsoleWindow(), SW_SHOW);
+                }
+                break;
+            case Mods::Control | 'I':
+                logline("Opening ASIO Control Panel");
+                Controller::processor.OpenControlPanel();
+                break;
+            case Mods::Control | 'L':
+                logline("===========================================");
+                logline("               Information                 ");
+                logline("===========================================");
+                if (Controller::processor.Information().state == Audijo::StreamState::Closed) {
+                    logline("no audio device opened, available devices:");
+                    for (auto& device : Controller::processor.Devices())
+                        logline("  ", device.name);
+                }
+                else {
+                    auto& _channels = Controller::processor.endpoints();
+                    logline("available audio devices:");
+                    for (auto& device : Controller::processor.Devices())
+                        logline("  ", device.name);
+                    logline("opened audio device: ", Controller::audioDevice);
+                    logline("  inputs:");
+                    for (auto& _channel : _channels)
+                        if (_channel.input) logline("    ", _channel.name);
+                    logline("  outputs:");
+                    for (auto& _channel : _channels)
+                        if (!_channel.input) logline("    ", _channel.name);
+                }
+
+                logline("available midi-in devices:");
+                for (auto& _channel : Controller::processor.midiin.Devices())
+                    logline("  ", _channel.name);
+                logline("opened midi-in device: ", Controller::midiinDevice);
+
+                logline("available midi-out devices:");
+                for (auto& _channel : Controller::processor.midiout.Devices())
+                    logline("  ", _channel.name);
+                logline("opened midi-out device: ", Controller::midioutDevice);
+
+                logline("buffersize: ", Controller::bufferSize);
+                logline("sampleRate: ", Controller::sampleRate);
+                if (!buttons.empty()) {
+                    logline("Buttons: ");
+                    for (auto& _button : buttons)
+                        logline("  ", _button.first, " -> ", _button.second);
+                }
+                logline("===========================================");
+                break;
+            }
+        }>();
+
+        refreshSettings();
+        processor.init();
+        refreshSettings();
+        loadRouting();
+
+        processor.midiin.Callback([&](const Midijo::CC& e) {
+            if (e.Value() == 0) return;
+            for (auto& _link : buttons) {
+                if (_link.first == e.Number()) {
+                    logline("Attempted to run file (", _link.second, ")");
+                    std::string _command = "start " + _link.second;
+                    std::system(_command.c_str());
+                }
+            }
+            });
+
+        while (_gui.loop()) {
+            processor.midiin.HandleEvents();
+        }
+
+        saveRouting();
+        processor.deinit();
+    }
+
     void Controller::refreshSettings() {
         std::ifstream _file{ "./settings.json" };
         if (!_file.is_open()) {
@@ -71,27 +192,14 @@ namespace Mixijo {
                             for (auto& _endpoint : _endpoints) if (_endpoint.is(json::String)) {
                                 int _id = processor.find_endpoint(_endpoint.as<json::string>(), input);
                                 if (_id != -1) _channel.add(_id);
-                                else {
-                                    errline("could not find endpoint \"", _endpoint.as<json::string>(), "\"");
-                                }
-                            } else {
-                                errline("endpoint should be a string.");
-                            }
-                        } else {
-                            errline("endpoints should be an array of strings.");
-                        }
+                                else errline("could not find endpoint \"", _endpoint.as<json::string>(), "\"");
+                            } else errline("endpoint should be a string.");
+                        } else errline("endpoints should be an array of strings.");
                     }
 
                     if (channel.contains("midimapping")) {
                         if (channel["midimapping"].is(json::Array)) {
-                            auto& _mapping = channel["midimapping"].as<json::array>();
-
-                            for (auto& _map : _mapping) {
-                                if (!_map.is(json::Object)) {
-                                    errline("failed to parse a midi mapping, should be a json object like this:");
-                                    errline("  { \"cc\": 73, \"param\" : \"gain\" }");
-                                    continue;
-                                }
+                            for (auto& _map : channel["midimapping"].as<json::array>()) {
                                 if (_map.contains("cc", json::Unsigned) && _map.contains("param", json::String)) {
                                     _channel.addMidiLink(_map["param"].as<json::string>(), _map["cc"].as<json::unsigned_integral>());
                                 } else {
@@ -99,9 +207,7 @@ namespace Mixijo {
                                     errline("  { \"cc\": 73, \"param\" : \"gain\" }");
                                 }
                             }
-                        } else {
-                            errline("midimapping should be an array of json objects.");
-                        }
+                        } else errline("midimapping should be an array of json objects.");
                     }
 
                     int _size = input ? in.size() : out.size();
@@ -128,52 +234,37 @@ namespace Mixijo {
                     errline("failed to parse \"", name, "\", expecting json array.");
                     return Color{};
                 }
-                for (auto& v : j.as<json::array>())
-                    if (!v.is(json::Unsigned)) {
-                        errline("failed to parse \"", name, "\", expecting json array with 1 to 4 unsigned integrals.");
-                        return Color{};
-                    }
-                if (j.size() == 1) return Color{
-                    static_cast<float>(j[0].as<json::unsigned_integral>())
-                };
-                else if (j.size() == 2) return Color{
-                    static_cast<float>(j[0].as<json::unsigned_integral>()),
-                    static_cast<float>(j[1].as<json::unsigned_integral>()),
-                };
-                else if (j.size() == 3) return Color{
-                    static_cast<float>(j[0].as<json::unsigned_integral>()),
-                    static_cast<float>(j[1].as<json::unsigned_integral>()),
-                    static_cast<float>(j[2].as<json::unsigned_integral>()),
-                };
-                else if (j.size() == 4) return Color{
-                    static_cast<float>(j[0].as<json::unsigned_integral>()),
-                    static_cast<float>(j[1].as<json::unsigned_integral>()),
-                    static_cast<float>(j[2].as<json::unsigned_integral>()),
-                    static_cast<float>(j[3].as<json::unsigned_integral>()),
-                }; 
-                else {
+                for (auto& v : j.as<json::array>()) if (!v.is(json::Unsigned)) {
                     errline("failed to parse \"", name, "\", expecting json array with 1 to 4 unsigned integrals.");
                     return Color{};
                 }
+                if (j.size() == 1) return Color{
+                    static_cast<float>(j[0].as<json::unsigned_integral>()) };
+                if (j.size() == 2) return Color{
+                    static_cast<float>(j[0].as<json::unsigned_integral>()),
+                    static_cast<float>(j[1].as<json::unsigned_integral>()) };
+                if (j.size() == 3) return Color{
+                    static_cast<float>(j[0].as<json::unsigned_integral>()),
+                    static_cast<float>(j[1].as<json::unsigned_integral>()),
+                    static_cast<float>(j[2].as<json::unsigned_integral>()) };
+                if (j.size() == 4) return Color{
+                    static_cast<float>(j[0].as<json::unsigned_integral>()),
+                    static_cast<float>(j[1].as<json::unsigned_integral>()),
+                    static_cast<float>(j[2].as<json::unsigned_integral>()),
+                    static_cast<float>(j[3].as<json::unsigned_integral>()) }; 
+                errline("failed to parse \"", name, "\", expecting json array with 1 to 4 unsigned integrals.");
+                return Color{};
             };
 
             constexpr auto _giveColor = [](auto& t, json& j, auto name) {
                 if (j.is(json::Array)) t.value.emplace(_decodeColor(j, std::string{ name } + ".color"));
                 else if (j.is(json::Object)) {
-                    if (j.contains("transition")) {
-                        if (j["transition"].is(json::Unsigned)) {
-                            t.transition = j["transition"].as<json::unsigned_integral>();
-                        } else {
-                            errline("failed to parse \"", name, ".transition\", expecting unsigned integral.");
-                        }
-                    }
-                    if (j.contains("color")) {
-                        if (j["color"].is(json::Array)) {
-                            t.value.emplace(_decodeColor(j["color"], std::string{ name } + ".color"));
-                        } else {
-                            errline("failed to parse \"", name, ".color\", expecting json array.");
-                        }
-                    }
+                    if (j.contains("transition")) if (j["transition"].is(json::Unsigned)) {
+                        t.transition = j["transition"].as<json::unsigned_integral>();
+                    } else errline("failed to parse \"", name, ".transition\", expecting unsigned integral.");
+                    if (j.contains("color")) if (j["color"].is(json::Array)) {
+                        t.value.emplace(_decodeColor(j["color"], std::string{ name } + ".color"));
+                    } else errline("failed to parse \"", name, ".color\", expecting json array.");
                     for (auto& [_key, _value] : j.as<json::object>()) {
                         if (_key == "disabled") t.statelinked.push_back({ Disabled, _decodeColor(j["disabled"], std::string{ name } + ".disabled") });
                         if (_key == "hovering") t.statelinked.push_back({ Hovering, _decodeColor(j["hovering"], std::string{ name } + ".hovering") });
@@ -181,58 +272,36 @@ namespace Mixijo {
                         if (_key == "pressed") t.statelinked.push_back({ Pressed, _decodeColor(j["pressed"], std::string{ name } + ".pressed") });
                         if (_key == "focused") t.statelinked.push_back({ Focused, _decodeColor(j["focused"], std::string{ name } + ".focused") });
                     }
-                } else {
-                    errline("failed to parse Color \"", name, "\", expecting json array or object");
-                }
+                } else errline("failed to parse Color \"", name, "\", expecting json array or object");
             };
             
             constexpr auto _giveValue = [](auto& t, json& j, auto name) {
                 if (j.is(json::Unsigned)) t.value.emplace(j.as<json::unsigned_integral>());
                 else if (j.is(json::Object)) {
-                    if (j.contains("transition")) {
-                        if (j["transition"].is(json::Unsigned)) {
-                            t.transition = j["transition"].as<json::unsigned_integral>();
-                        } else {
-                            errline("failed to parse \"", name, ".transition\", expecting unsigned integral.");
-                        }
-                    }
-                    if (j.contains("value")) {
-                        if (j["value"].is(json::Unsigned)) {
-                            t.value.emplace(j["value"].as<json::unsigned_integral>());
-                        } else {
-                            errline("failed to parse \"", name, ".value\", expecting unsigned integral.");
-                        }
-                    }
+                    if (j.contains("transition")) if (j["transition"].is(json::Unsigned)) {
+                        t.transition = j["transition"].as<json::unsigned_integral>();
+                    } else errline("failed to parse \"", name, ".transition\", expecting unsigned integral.");
+                    if (j.contains("value")) if (j["value"].is(json::Unsigned)) {
+                        t.value.emplace(j["value"].as<json::unsigned_integral>());
+                    } else errline("failed to parse \"", name, ".value\", expecting unsigned integral.");
                     for (auto& [_key, _value] : j.as<json::object>()) {
-                        if (_key == "disabled") {
-                            if (_value.type() == json::Unsigned)
-                                t.statelinked.push_back({ Disabled, j["disabled"].as<json::unsigned_integral>() });
-                            else errline("failed to parse \"", name, ".disabled\", expecting unsigned integral.");
-                        }
-                        if (_key == "hovering") {
-                            if (_value.type() == json::Unsigned)
-                                t.statelinked.push_back({ Hovering, j["hovering"].as<json::unsigned_integral>() });
-                            else errline("failed to parse \"", name, ".hovering\", expecting unsigned integral.");
-                        }
-                        if (_key == "selected") {
-                            if (_value.type() == json::Unsigned)
-                                t.statelinked.push_back({ Selected, j["selected"].as<json::unsigned_integral>() });
-                            else errline("failed to parse \"", name, ".selected\", expecting unsigned integral.");
-                        }
-                        if (_key == "pressed") {
-                            if (_value.type() == json::Unsigned)
-                                t.statelinked.push_back({ Pressed, j["pressed"].as<json::unsigned_integral>() });
-                            else errline("failed to parse \"", name, ".pressed\", expecting unsigned integral.");
-                        }
-                        if (_key == "focused") {
-                            if (_value.type() == json::Unsigned)
-                                t.statelinked.push_back({ Focused, j["focused"].as<json::unsigned_integral>() });
-                            else errline("failed to parse \"", name, ".focused\", expecting unsigned integral.");
-                        }
+                        if (_key == "disabled") if (_value.type() == json::Unsigned)
+                            t.statelinked.push_back({ Disabled, j["disabled"].as<json::unsigned_integral>() });
+                        else errline("failed to parse \"", name, ".disabled\", expecting unsigned integral.");
+                        if (_key == "hovering") if (_value.type() == json::Unsigned)
+                            t.statelinked.push_back({ Hovering, j["hovering"].as<json::unsigned_integral>() });
+                        else errline("failed to parse \"", name, ".hovering\", expecting unsigned integral.");
+                        if (_key == "selected") if (_value.type() == json::Unsigned)
+                            t.statelinked.push_back({ Selected, j["selected"].as<json::unsigned_integral>() });
+                        else errline("failed to parse \"", name, ".selected\", expecting unsigned integral.");
+                        if (_key == "pressed") if (_value.type() == json::Unsigned)
+                            t.statelinked.push_back({ Pressed, j["pressed"].as<json::unsigned_integral>() });
+                        else errline("failed to parse \"", name, ".pressed\", expecting unsigned integral.");
+                        if (_key == "focused") if (_value.type() == json::Unsigned)
+                            t.statelinked.push_back({ Focused, j["focused"].as<json::unsigned_integral>() });
+                        else errline("failed to parse \"", name, ".focused\", expecting unsigned integral.");
                     }
-                } else {
-                    errline("failed to parse number \"", name, "\", expecting unsigned integer or object");
-                }
+                } else errline("failed to parse number \"", name, "\", expecting unsigned integer or object");
             };
 
             if (_theme.contains("background")) _giveColor(theme.background, _theme["background"], "theme.background");
@@ -362,8 +431,7 @@ namespace Mixijo {
                 ? static_cast<Channel&>(Controller::processor.inputs[_channel->id])
                 : static_cast<Channel&>(Controller::processor.outputs[_channel->id]);
 
-            _file << _channel->name;
-            _file << ":[";
+            _file << _channel->name << ":[";
             _c.getSettings(_file);
 
             if (_channel->input) {
@@ -383,125 +451,6 @@ namespace Mixijo {
             }
             _file << "]\n";
         }
-    }
-
-    void Controller::start() {
-        std::filesystem::path _logpath = "logs/";
-        if (!std::filesystem::exists(_logpath))
-            std::filesystem::create_directory("logs/");
-        logOutput.open(std::format("logs/mixijo_{:%EY%Om%Od_%OH%OM%OS}.log", std::chrono::system_clock::now()));
-
-        Guijo::Gui _gui;
-        window = _gui.emplace<Frame>(Window::Construct{
-            .name = "Mixijo",
-            .dimensions { -1, -1, 1000, 500 },
-        });
-
-        window->setIcon(IDI_ICON1);
-
-        window->event<[](Window& self, const KeyPress& e) {
-            if (e.mod & Mods::Control && e.keycode == 'S') {
-                logline("Saving routing...");
-                saveRouting();
-                logline("Saved routing");
-            } else if (e.mod & Mods::Control && e.mod & Mods::Shift && e.keycode == 'R') {
-                logline("Reloading settings and reopening devices...");
-                saveRouting();
-                refreshSettings();
-                processor.init();
-                loadRouting();
-                logline("Reloaded settings and reopened devices");
-            } else if (e.mod & Mods::Control && e.keycode == 'R') {
-                logline("Reloading settings...");
-                saveRouting();
-                refreshSettings();
-                loadRouting();
-                logline("Reloaded settings");
-            } else if (e.mod & Mods::Control && e.keycode == 'C') {
-                if (Controller::showConsole) {
-                    Controller::showConsole = false;
-                    logline("Hiding console window");
-                    ShowWindow(GetConsoleWindow(), SW_HIDE);
-                } else {
-                    Controller::showConsole = true;
-                    logline("Showing console window");
-                    ShowWindow(GetConsoleWindow(), SW_SHOW);
-                }
-            } else if (e.mod & Mods::Control && e.keycode == 'I') {
-                logline("Opening ASIO Control Panel");
-                Controller::processor.OpenControlPanel();
-            } else if (e.mod & Mods::Control && e.keycode == 'L') {
-                logline("===========================================");
-                logline("               Information                 ");
-                logline("===========================================");
-                if (Controller::processor.Information().state == Audijo::StreamState::Closed) {
-                    logline("no audio device opened, available devices:");
-                    for (auto& device : Controller::processor.Devices()) {
-                        logline("  ", device.name);
-                    }
-                } else {
-                    auto& _channels = Controller::processor.endpoints();
-                    logline("available audio devices:");
-                    for (auto& device : Controller::processor.Devices()) {
-                        logline("  ", device.name);
-                    }
-                    logline("opened audio device: ", Controller::audioDevice);
-                    logline("  inputs:");
-                    for (auto& _channel : _channels) {
-                        if (_channel.input) logline("    ", _channel.name);
-                    }
-                    logline("  outputs:");
-                    for (auto& _channel : _channels) {
-                        if (!_channel.input) logline("    ", _channel.name);
-                    }
-                }
-
-                logline("available midi-in devices:");
-                for (auto& _channel : Controller::processor.midiin.Devices()) {
-                    logline("  ", _channel.name);
-                }
-                logline("opened midi-in device: ", Controller::midiinDevice);
-
-                logline("available midi-out devices:");
-                for (auto& _channel : Controller::processor.midiout.Devices()) {
-                    logline("  ", _channel.name);
-                }
-                logline("opened midi-out device: ", Controller::midioutDevice);
-
-                logline("buffersize: ", Controller::bufferSize);
-                logline("sampleRate: ", Controller::sampleRate);
-                if (!buttons.empty()) {
-                    logline("Buttons: ");
-                    for (auto& _button : buttons) {
-                        logline("  ", _button.first, " -> ", _button.second);
-                    }
-                }
-                logline("===========================================");
-            }
-        }>();
-
-        refreshSettings();
-        processor.init();
-        refreshSettings();
-        loadRouting();
-
-        processor.midiin.Callback([&](const Midijo::CC& e) {
-            if (e.Value() == 0) return;
-            for (auto& _link : buttons) {
-                if (_link.first == e.Number()) {
-                    logline("Attempted to run file (", _link.second, ")");
-                    std::string _command = "start " + _link.second;
-                    std::system(_command.c_str());
-                }
-            }
-        });
-
-        while (_gui.loop()) {
-            processor.midiin.HandleEvents();
-        }
-
-        saveRouting();
-        processor.deinit();
     }
 
     void Controller::Theme::reset() {
