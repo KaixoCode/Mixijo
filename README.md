@@ -2,6 +2,7 @@
 
 Lightweight audio mixer for ASIO devices.
 
+![image](https://kaixo.me/assets/mixijo.png)
 
 ## How To Setup
 The easiest way to set Mixijo up is to start it up. 
