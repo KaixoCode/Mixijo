@@ -58,9 +58,16 @@ namespace Mixijo {
         const auto _valSize = values.size();
         const auto _inSize = in.size();
         if (_valSize == 0 || _inSize == 0) return;
-        const auto _max = std::max(_valSize, _inSize);
-        for (std::size_t i = 0; i < _max; ++i)
-            values[i % _valSize] += in[i % _inSize] * level;
+        if (_valSize == _inSize) {
+            for (std::size_t i = 0; i < _valSize; ++i)
+                values[i] += in[i] * level;
+        } else if (_valSize > _inSize) {
+            for (std::size_t i = 0; i < _valSize; ++i)
+                values[i] += in[i % _inSize] * level;
+        } else {
+            for (std::size_t i = 0; i < _inSize; ++i)
+                values[i % _valSize] += in[i] * level;
+        }
     }
 
     void OutputChannel::clear() {

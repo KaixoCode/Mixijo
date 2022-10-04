@@ -36,13 +36,11 @@ namespace Mixijo {
         window->setIcon(IDI_ICON1);
 
         window->event<[](Window& self, const KeyPress& e) {
-            switch(e) {
-            case Mods::Control | 'S':
+            if (e.keycode == 'S' && e.mod & Mods::Control) {
                 logline("Saving routing...");
                 saveRouting();
                 logline("Saved routing");
-                break;
-            case Mods::Control | Mods::Shift | 'R':
+            } else if (e.keycode == 'R' && e.mod & (Mods::Control | Mods::Shift)) {
                 logline("Reloading settings and reopening devices...");
                 saveRouting();
                 refreshSettings();
@@ -50,15 +48,13 @@ namespace Mixijo {
                 refreshSettings();
                 loadRouting();
                 logline("Reloaded settings and reopened devices");
-                break;
-            case Mods::Control | 'R':
+            } else if (e.keycode == 'R' && e.mod & Mods::Control) {
                 logline("Reloading settings...");
                 saveRouting();
                 refreshSettings();
                 loadRouting();
                 logline("Reloaded settings");
-                break;
-            case Mods::Control | 'C':
+            } else if (e.keycode == 'C' && e.mod & Mods::Control) {
                 if (Controller::showConsole) {
                     Controller::showConsole = false;
                     logline("Hiding console window");
@@ -68,12 +64,10 @@ namespace Mixijo {
                     logline("Showing console window");
                     ShowWindow(GetConsoleWindow(), SW_SHOW);
                 }
-                break;
-            case Mods::Control | 'I':
+            } else if (e.keycode == 'I' && e.mod & Mods::Control) {
                 logline("Opening ASIO Control Panel");
                 Controller::processor.OpenControlPanel();
-                break;
-            case Mods::Control | 'L':
+            } else if (e.keycode == 'L' && e.mod & Mods::Control) {
                 logline("===========================================");
                 logline("               Information                 ");
                 logline("===========================================");
@@ -114,7 +108,6 @@ namespace Mixijo {
                         logline("  ", _button.first, " -> ", _button.second);
                 }
                 logline("===========================================");
-                break;
             }
         }>();
 
