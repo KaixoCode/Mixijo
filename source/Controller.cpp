@@ -40,7 +40,7 @@ namespace Mixijo {
                 logline("Saving routing...");
                 saveRouting();
                 logline("Saved routing");
-            } else if (e.keycode == 'R' && e.mod & (Mods::Control | Mods::Shift)) {
+            } else if (e.keycode == 'R' && e.mod & Mods::Control && e.mod & Mods::Shift) {
                 logline("Reloading settings and reopening devices...");
                 saveRouting();
                 refreshSettings();
