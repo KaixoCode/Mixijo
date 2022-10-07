@@ -49,9 +49,13 @@ namespace Mixijo {
     }
 
     void InputChannel::generate(Buffer<double>::Frame& frame) {
-        for (std::size_t i = 0; int _endpoint : endpoints) 
-            values[i] = frame[_endpoint], ++i;
-        process();
+        idle = true;
+        for (std::size_t i = 0; int _endpoint : endpoints) {
+            values[i] = frame[_endpoint] * gain;
+            peaks[i] = std::max(std::abs(values[i]), peaks[i]);
+            idle &= values[i] == 0;
+            ++i;
+        }
     }
 
     void OutputChannel::receive(const std::vector<double>& in, double level) {
@@ -75,8 +79,11 @@ namespace Mixijo {
     }
 
     void OutputChannel::generate(Buffer<double>::Frame& frame) {
-        process();
-        for (std::size_t i = 0; int _endpoint : endpoints)
-            frame[_endpoint] += values[i], ++i;
+        for (std::size_t i = 0; int _endpoint : endpoints) {
+            frame[_endpoint] += values[i] * gain;
+            peaks[i] = std::max(std::abs(values[i]), peaks[i]);
+            values[i] = 0;
+            ++i;
+        }
     }
 }

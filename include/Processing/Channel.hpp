@@ -119,6 +119,7 @@ namespace Mixijo {
 
     struct InputChannel : Channel {
         std::vector<double> output_levels{};
+		bool idle = false;
 
         void generate(Buffer<double>::Frame& frame);
     };

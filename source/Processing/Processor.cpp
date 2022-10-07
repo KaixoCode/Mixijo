@@ -133,12 +133,14 @@ namespace Mixijo {
 
     void Processor::callback(Buffer<double>& in, Buffer<double>& out, CallbackInfo info, Processor& self) {
         std::scoped_lock _{ self.lock };
-        for (std::size_t i = 0; i < in.Frames(); ++i) {
+        auto _frames = out.Frames();
+        for (std::size_t i = 0; i < out.Channels(); ++i)
+            std::memset(out.data()[i], 0, _frames * sizeof(double));
+        for (std::size_t i = 0; i < _frames; ++i) {
             auto _in_frame = in[i], _out_frame = out[i];
-            for (auto& _endpoint : _out_frame) _endpoint = 0;
-            for (auto& _output : self.outputs) _output.clear();
             for (auto& _input : self.inputs) {
                 _input.generate(_in_frame);
+                if (_input.idle) continue;
                 for (std::size_t j = 0; double _level : _input.output_levels)
                     self.outputs[j++].receive(_input.values, _level);
             }
