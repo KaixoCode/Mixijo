@@ -81,7 +81,7 @@ namespace Mixijo {
     void OutputChannel::generate(Buffer<double>::Frame& frame) {
         for (std::size_t i = 0; int _endpoint : endpoints) {
             frame[_endpoint] += values[i] * gain;
-            peaks[i] = std::max(std::abs(values[i]), peaks[i]);
+            peaks[i] = std::max(std::abs(values[i] * gain), peaks[i]);
             values[i] = 0;
             ++i;
         }
