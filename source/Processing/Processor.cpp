@@ -51,6 +51,18 @@ namespace Mixijo {
         auto& devices = Devices(true);
         for (auto& _device : devices) {
             if (_device.name == Controller::audioDevice) {
+                Controller::logline("Opening device (", _device.name, ")");
+                Controller::logline("  id:         ", _device.id);
+                Controller::logline("  inputs:     ", _device.inputChannels);
+                Controller::logline("  outputs:    ", _device.outputChannels);
+                Controller::logline("  samplerate: ", Controller::sampleRate);
+                Controller::logline("  buffersize: ", Controller::bufferSize);
+                Controller::logline("  channels:   ");
+
+                for (auto& channel : _device.Channels()) {
+                    Controller::logline("    ", channel.name, " [", channel.id, "] - ", channel.input ? "input" : "output");
+                }
+
                 Audijo::Error _res = Open({ 
                     .input = _device.id, 
                     .output = _device.id,
@@ -62,6 +74,7 @@ namespace Mixijo {
                     switch (_res) {
                     case Audijo::InvalidBufferSize: Controller::errline("Invalid buffer size! (", Controller::bufferSize, ")"); break;
                     case Audijo::InvalidSampleRate: Controller::errline("Invalid samplerate! (", Controller::sampleRate, ")"); break;
+                    case Audijo::NotPresent: Controller::errline("Device not present! (", Controller::audioDevice, ")"); break;
                     case Audijo::Fail: Controller::errline("Failed to open audio device (", Controller::audioDevice, ")"); break;
                     }
                 }
